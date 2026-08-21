@@ -1,24 +1,18 @@
 # ccIPD-arena-tracker — Design Document
 
-A basic design document for the fork [`MGenius-home/ccIPD-arena-tracker`](https://github.com/MGenius-home/ccIPD-arena-tracker), which wraps the upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
+A design document for the fork [`MGenius-home/ccIPD-arena-tracker`](https://github.com/MGenius-home/ccIPD-arena-tracker), which wraps [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker) (upstream source) as a Docker image built from the pinned upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
 
-This document was rewritten after the upstream binary was decompiled into a buildable .NET 8 solution under `src/`. Every behavioral claim below is now grounded in the recovered C# source with `path:line` citations.
+All factual claims below are grounded in either:
+- this fork's own files (`Dockerfile`, `README.md`), or
+- strings and symbols extracted from the upstream `beta-24` image filesystem (paths prefixed `/app/`).
 
 ---
 
 ## 1. Overview
 
-A long-running .NET console worker that polls Star Wars: Galaxy of Heroes (SWGOH) arena rankings for a configured list of players and posts Discord notifications when their ranks change. It runs as a Heroku container `worker` dyno — there is no web traffic and no inbound HTTP.
+A long-running worker that polls Star Wars: Galaxy of Heroes (SWGOH) arena rankings for a configured list of players and posts Discord notifications when their ranks change. The container is a plain single-process worker — there is no web traffic and no inbound HTTP.
 
-```
-Heroku worker dyno
-└─ SimpleTracker (.NET 8 console, target IpdArenaTracker.sln)
-   ├─ TrackerJob            ← main poll loop (every 2s)
-   │   └─ Tracker.Track()   ← iterates player settings, fetches ranks, diffs
-   │       └─ writes DiscordMessage to channel
-   └─ DiscordMessengerJob   ← drains channel, batches ≤10, POSTs webhook
-       └─ NewDiscordMessenger (Polly retry, honors 429 Retry-After)
-```
+The fork itself contains **no application source**. All behavior comes from the pinned upstream image. The fork is purely a thin Docker packaging layer that lets the upstream image be built and run under any Docker host.
 
 ---
 
@@ -26,340 +20,231 @@ Heroku worker dyno
 
 | Path | Purpose |
 |---|---|
-| `Dockerfile` | `FROM iprobedroid/swgoh-arena-tracker:beta-24` (the upstream image) |
-| `heroku.yml` | Heroku container stack, builds a `worker` process |
-| `app.json` | Heroku app manifest |
-| `README.md` | Deploy walkthrough (with deploy button pointing at this fork) |
-| `assets/` | PNGs used by the README |
-| `DESIGN.md` | This file |
-| `src/` | **Recovered .NET 8 source** — decompiled from `beta-24` with ILSpy, modified to retarget `net8.0` and use modern NuGet packages. Builds cleanly. |
-| `src/IpdArenaTracker.sln` | Solution file |
-| `src/Ipd.GameClient/` | SWGOH protobuf + RPC client |
-| `src/Ipd.Core/` | Domain models, services, message templates, background jobs |
-| `src/SimpleTracker/` | Entry point + composition root + tracker loop |
+| `Dockerfile` | One line: `FROM iprobedroid/swgoh-arena-tracker:beta-24`. No build steps. |
+| `README.md` | Build/run instructions and the configuration variable table. |
+| `src/` | A copy of the upstream .NET 5 source tree, included for reference. Not compiled by the `Dockerfile` (the Dockerfile uses the upstream published image, not this source). |
+| `DESIGN.md` | This document. |
+| `.gitignore` | Standard .NET / IDE / OS excludes. |
 
-The fork ships the upstream Docker image as-is. The `src/` tree is a parallel buildable copy you can modify and replace the image with.
+There is no CI configuration, no `docker-compose.yml`, and no platform-specific deploy manifest in the fork.
 
 ---
 
-## 3. Build / run
+## 3. Runtime topology
 
-```bash
-cd src
-dotnet restore
-dotnet build                # → 0 errors, 4 warnings (all in original code)
-dotnet run --project SimpleTracker   # uses env vars from current shell
+```
+┌──────────────────────────────────────────┐
+│  Docker host (any: local, VM, cloud)     │
+│  ┌────────────────────────────────────┐  │
+│  │ iprobedroid/swgoh-arena-tracker    │  │
+│  │        :beta-24                    │  │
+│  │  (pulled by the fork's Dockerfile) │  │
+│  └────────────────────────────────────┘  │
+└──────────────────────────────────────────┘
+        │ outbound HTTPS only
+        ▼
+   swprod.capitalgames.com:443  (game RPC)
+   swgoh-tracker-stats.herokuapp.com:443 (player metadata; upstream service)
+   discord.com:443              (webhook delivery)
 ```
 
-Or build the container:
+The container's entrypoint is the .NET 5 binary `SimpleTracker` (`/app/SimpleTracker`, target framework `net5.0`, framework `Microsoft.NETCore.App 5.0.0`, from `/app/SimpleTracker.runtimeconfig.json`). It loads its configuration from environment variables on startup (`SimpleTracker.dll` references `GetEnvironmentVariable`, `GetEnvironmentVariables`).
 
-```bash
-docker build -t my-tracker src/
-```
-
-(You'll need a Dockerfile that wraps the `dotnet publish` output.)
+No third-party scheduler library is bundled (no `Quartz`, `Hangfire`, or `cron` strings in the binaries). The poll loop is driven by `Ipd.Core.Jobs.DiscordMessengerJob.ExecuteAsync` (`Ipd.Core.dll`) — an async loop that waits between iterations.
 
 ---
 
-## 4. Runtime topology
+## 4. Configuration (environment variables)
 
-```
-                            ┌──────────────────────────────────────────┐
-                            │  Heroku container dyno (process: worker) │
-                            │  ┌────────────────────────────────────┐  │
-                            │  │ SimpleTracker (net8.0 console)     │  │
-                            │  └────────────────────────────────────┘  │
-                            └────────────┬─────────────────────────────┘
-                                         │ outbound HTTPS only
-                ┌────────────────────────┼────────────────────────┐
-                ▼                        ▼                        ▼
-    swprod.capitalgames.com:443  swgoh-tracker-stats:443   discord.com:443
-    (game RPC, protobuf+gzip)     (player metadata +          (webhook POST
-                                  analytics beacon)            JSON content)
-```
+Read directly from the process environment via `Microsoft.Extensions.Configuration.EnvironmentVariables` (referenced by `SimpleTracker.dll` and `Ipd.Core.dll`).
 
-The entry point is `SimpleTracker/Program.cs:Main`. It:
-1. Builds a logger from `LOGGER_TYPE` / `LOGGER_HOOK` env vars (`Program.cs:24-42`).
-2. Bails out if `DISCORD_WEB_HOOK` is missing (`Program.cs:63-66`).
-3. Calls `CreateHostBuilder(args).Build().Run()` which registers two `IHostedService`s and starts them: `TrackerJob` (poll loop) and `DiscordMessengerJob` (webhook dispatcher) (`Program.cs:44-58`).
+| Variable | Required | Purpose |
+|---|---|---|
+| `DISCORD_WEB_HOOK` | yes | Full Discord webhook URL. Posted to on every message. |
+| `ALLY_CODES_URL` | one of two | HTTPS URL that returns a JSON list of players (the "gist" workflow). |
+| `ALLY_CODES` | one of two | Inline comma-separated ally codes (the simple workflow). Ignored when `ALLY_CODES_URL` is set. |
+| `ARENA_TYPE` | optional | `SQUAD` (default) or `FLEET` — selects which arena rank column to track. |
+| `CUSTOM_MESSAGE_STATUS` | optional | Override the status (no-change) message template. |
+| `CUSTOM_MESSAGE_CLIMB` | optional | Override the climb message template. |
+| `CUSTOM_MESSAGE_DROP` | optional | Override the drop message template. |
+| `TAG_ON_CLIMB_RANK_LIMIT` | optional | Numeric rank threshold — tag the player on Discord only if rank climbed past it. |
+| `TAG_ON_DROP_RANK_LIMIT` | optional | Numeric rank threshold — tag the player on Discord only if rank dropped past it. |
+| `TAG_ON_DROP_PO_LIMIT` | optional | Time-to-payout threshold (minutes) for drop-side tagging. |
+| `DISABLE_STATUS_MESSAGE` | optional | Set `TRUE` to suppress periodic status messages when nothing has changed. |
+| `DISCORD_TAGS` | optional | Discord role IDs / user IDs to mention on tag-worthy events. |
+| `DISABLE_ANALYTICS` | optional | Set `TRUE` to opt out of analytics beacons. |
+| `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
+| `LOGGER_HOOK` | conditional | Discord webhook for the logger when `LOGGER_TYPE=DISCORD`. |
+| `GAME_CLIENT_VERSION` | optional | Override the spoofed SWGOH client version (default `99.99.99`, per `SimpleTracker.dll`). |
 
-Both jobs inherit from `BackgroundService` and run an infinite `while (!stoppingToken.IsCancellationRequested)` loop with `Task.Delay` between iterations.
-
----
-
-## 5. Source layout
-
-Three projects, in dependency order:
-
-### `Ipd.GameClient` — SWGOH RPC client
-Encodes/decodes protobuf for the SWGOH mobile-client wire protocol.
-- `Ipd.Game.Protocol/` — protobuf-generated types: `RequestEnvelope`, `ResponseEnvelope`, `PlayerProfileRequest`, `SlimPlayerArenaProfileResponse`, `PlayerArenaStatus`, etc. (originally auto-generated from `.proto` schemas whose `.desc` blobs are embedded in the DLL).
-- `Ipd.GameClient/GameClient.cs` — wraps a synchronous HTTP POST to `https://swprod.capitalgames.com/rpc` (`GameClient.cs:102`). Builds an envelope with `ServiceName=PlayerRpc`, `MethodName=GetPlayerArenaProfile`, `Platform=Android`, `ClientExternalVersion=99.99.99`, `Region=NA`, gzip `AcceptEncoding`. Reads `SlimPlayerArenaProfileResponse`, filters `PvpProfile` by `Profilepvpcharacter` / `Profilepvpship` tabs to extract squad and fleet ranks.
-- `Ipd.GameClient.Models/PlayerArena.cs` — the domain shape returned by the client.
-
-### `Ipd.Core` — domain + services
-- `Ipd.Core.Interfaces/` — abstractions: `IPlayerSettingsProvider`, `IPlayerRankService`, `IArenaRankStorage`, `IDiscordMessenger`, `INewDiscordMessenger`, `IAllyCodesProvider`, `IStatsService`, `ITagsProvider`, `ILog`.
-- `Ipd.Core.Models/` — `PlayerSettings`, `PlayerArenaRank`, `ArenaType`, `AuthResponse`, `TrackerStats`.
-- `Ipd.Core.Models.Discord/` — `DiscordMessage` (just a URL + a string body), `MessageType`.
-- `Ipd.Core.Messages/MessageMap.cs` — the placeholder→value dictionary used to render messages (placeholders: `%NAME%`, `%USER_ICON%`, `%PLAYER_NAME%`, `%ALLY_CODE%`, `%CURRENT_RANK%`, `%PREVIOUS_RANK%`, `%TIME_TO_PO%`, `%TAG_ON_CLIMB%`, `%TAG_ON_DROP%`).
-- `Ipd.Core.Messages/MessageGenerator.cs` — three template-string functions (`GenerateStatusMessage`, `GenerateMessageOnClimb`, `GenerateMessageOnDrop`).
-- `Ipd.Core.Messages/EnvSettingsService.cs` — reads the env-var-driven config (`MessageFormatOnStatus`, `MessageFormatOnClimb`, `MessageFormatOnDrop`, `IsStatusMessageDisabled`, `TagOnDropRankLimit`, `TagOnClimbRankLimit`, `TagOnDropPayoutLimitMins`).
-- `Ipd.Core.Services/`:
-  - `PlayerSettingsUrlProvider.cs` — `GET $ALLY_CODES_URL` → `List<PlayerSettings>` (JSON).
-  - `PlayerSettingsEnvProvider.cs` — reads env vars (`ALLY_CODES`, `AC_*` prefix, `DISCORD_TAGS`).
-  - `PlayerRankService.cs` — adapts `IGameClient.GetSlimPlayerArenaRanks` into `IPlayerRankService.GetPlayerRank`, picking `SquadArenaRank` or `FleetArenaRank` per `ArenaType`.
-  - `StatsService.cs` — POSTs a `TrackerStats` beacon to `https://swgoh-tracker-stats.herokuapp.com/stats` on startup.
-  - `DiscordMessenger.cs` — legacy webhook sender (creates its own `HttpClient`, no DI).
-  - `NewDiscordMessenger.cs` — DI-friendly webhook sender (takes `HttpClient` via ctor).
-  - `DiscordLogger.cs` — mirror log lines to a Discord channel.
-  - `EnvTagsProvider.cs` — `DiscordId` / `TagIdOnClimb` / `TagIdOnDrop` per player.
-  - `RandomPlayerRankService.cs` — test helper (returns random ranks).
-- `Ipd.Core.Utils/`:
-  - `ExecutionThrottle.cs` — sleeps between iterations to avoid rate-limit storms.
-  - `PoUtils.cs` — computes `Duration timeToPo` for the next arena payout. Squad payouts at 18:00 UTC, fleet at 19:00 UTC; subtracts the player's local TZ offset; if the result is in the past, adds 24 h.
-- `Ipd.Core.Jobs/DiscordMessengerJob.cs` — the webhook dispatcher BackgroundService.
-- `Ipd.Core.Extensions/` — `StringExtensions.NormalizeAllyCode`, `TimeExtension.ToPayoutString` (formats `Duration` as `HH:MM`), `AsyncExtensions.ToListAsync`.
-
-### `SimpleTracker` — entry point + composition
-- `SimpleTracker/Program.cs` — env-var parsing + DI wiring + `Main` bootstrap.
-- `SimpleTracker/Tracker.cs` — the per-poll orchestrator.
-- `SimpleTracker.Infrastructure/TrackerJob.cs` — the poll loop `BackgroundService`.
-- `SimpleTracker.Infrastructure/MetricsJob.cs` — unused / disabled (referenced by name but not registered).
-- `SimpleTracker.Services/StaticArenaRankStorage.cs` — in-process `ConcurrentDictionary<string, int>` keyed by ally code.
-- `SimpleTracker.Services/EnvAllyCodesProvider.cs` — reads `AC_*` env vars (alternate to `ALLY_CODES`).
-- `SimpleTracker.Services/EnvCsvAllyCodesProvider.cs` — reads `ALLY_CODES` CSV.
+Player settings (custom name, Discord ID, custom emoji) can be supplied either inline in the `ALLY_CODES` value (`{0}:{1}:{2}` per `SimpleTracker.dll`) or fetched from a remote URL by `PlayerSettingsUrlProvider` (`Ipd.Core.dll`).
 
 ---
 
-## 6. Configuration (environment variables)
+## 5. Data source
 
-All env vars are read in `Program.cs` (entry point) and `EnvSettingsService.cs` (per-poll config). The full list lives in `StatsService.cs:15`:
+Two outbound services are called. Evidence is from string constants in `/app/Ipd.GameClient.dll` and `/app/Ipd.Core.dll`.
 
-```
-ARENA_TYPE, DISCORD_WEB_HOOK, GAME_CLIENT_VERSION, ALLY_CODES,
-DISCORD_TAGS, ALLY_CODES_URL, CUSTOM_MESSAGE_STATUS, CUSTOM_MESSAGE_DROP, CUSTOM_MESSAGE_CLIMB
-```
+### 5.1 Game API — `swprod.capitalgames.com`
 
-Plus undocumented-but-honored ones: `DISABLE_STATUS_MESSAGE`, `TAG_ON_CLIMB_RANK_LIMIT`, `TAG_ON_DROP_RANK_LIMIT`, `TAG_ON_DROP_PO_LIMIT`, `LOGGER_TYPE`, `LOGGER_HOOK`, `DISABLE_ANALYTICS`, `AC_<digits>` (one var per ally code).
+- **Endpoint:** `POST https://swprod.capitalgames.com/rpc` (`Ipd.GameClient.dll`)
+- **Request body:** protobuf-encoded `RequestEnvelope` (`ipd.game.protocol` namespace) carrying `GetPlayerArenaProfile` for each ally code.
+- **Encoding:** `Content-Type: application/x-protobuf`; response is gzip-encoded protobuf (`Accept-Encoding: gzip`, `ContentEncoding: GZIPACCEPTENCODING` / `GZIPCONTENTENCODING`).
+- **Auth:** the envelope's `AuthId` and `AuthToken` fields are populated from constants in the binary. This is the same wire protocol the SWGOH mobile client uses.
+- **Platform spoof:** the envelope's `Platform` field is set to `Android`, and `ClientVersion` defaults to `99.99.99` unless overridden.
+- **Response shape:** `PlayerArenaProfile` (full) or `SlimPlayerArenaProfile` (name + level + allyCode + playerId + pvpProfile + local time-zone offset). The slim profile is what `GetSlimPlayerArenaRanks` consumes. Each `PlayerArenaStatus` carries `arena_type` (`SquadArena` | `FleetArena`) and `place` (the rank).
+- **Method name:** `GetPlayerArenaProfile` (`Ipd.GameClient.dll`).
 
-| Variable | Required | Purpose | Read at |
-|---|---|---|---|
-| `DISCORD_WEB_HOOK` | yes | Full Discord webhook URL. If missing, the process logs and exits (`Program.cs:63-66`). | startup |
-| `ALLY_CODES_URL` | one of two | HTTPS URL returning JSON `List<PlayerSettings>`. Wins over `ALLY_CODES` if set. | startup |
-| `ALLY_CODES` | one of two | Inline comma-separated ally codes. Each is a 9-digit string. | startup |
-| `AC_123456789` | optional | Per-player env var (any number of them) — alternate ally-code source. Up to 75 are taken. `EnvAllyCodesProvider.cs:14-22`. | startup |
-| `ARENA_TYPE` | optional | `SQUAD` (default) or `FLEET`. Anything other than `FLEET` (case-insensitive) is `Squad`. `Program.cs:77`. | startup |
-| `GAME_CLIENT_VERSION` | optional | Override the spoofed SWGOH client version. Default `99.99.99`. `Program.cs:75`. | startup |
-| `DISCORD_TAGS` | optional | Pipe/comma separated `discordId` list, applied per player via `TagIdOnClimb` / `TagIdOnDrop` (those fields are in `PlayerSettings`). | per poll |
-| `CUSTOM_MESSAGE_STATUS` | optional | Override status message template. Default `"%USER_ICON%\`%PLAYER_NAME%\` is at %CURRENT_RANK%. payout in \`%TIME_TO_PO%\`"`. | per poll |
-| `CUSTOM_MESSAGE_CLIMB` | optional | Override climb template. Default `"%TAG_ON_CLIMB%%USER_ICON%\`%PLAYER_NAME%\` climbed from %PREVIOUS_RANK% to %CURRENT_RANK%. payout in \`%TIME_TO_PO%\`"`. | per poll |
-| `CUSTOM_MESSAGE_DROP` | optional | Override drop template. Default `"%TAG_ON_DROP%%USER_ICON%\`%PLAYER_NAME%\` dropped from %PREVIOUS_RANK% to %CURRENT_RANK%. payout in \`%TIME_TO_PO%\`"`. | per poll |
-| `DISABLE_STATUS_MESSAGE` | optional | `TRUE` to suppress the periodic status message (only climb/drop events fire). `EnvSettingsService.cs:41-52`. | per poll |
-| `TAG_ON_CLIMB_RANK_LIMIT` | optional | Numeric — only attach `@<tagIdOnClimb>` when the new rank is at or below this. Default `1000`. | per poll |
-| `TAG_ON_DROP_RANK_LIMIT` | optional | Numeric — only attach `@<tagIdOnDrop>` when the new rank is at or above this AND time-to-payout is below `TAG_ON_DROP_PO_LIMIT`. Default `0`. | per poll |
-| `TAG_ON_DROP_PO_LIMIT` | optional | Numeric minutes — payout-urgency gate for drop tagging. Default `1440`. | per poll |
-| `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD`. `Program.cs:26`. | startup |
-| `LOGGER_HOOK` | conditional | Webhook URL when `LOGGER_TYPE=DISCORD`. `Program.cs:27`. | startup |
-| `DISABLE_ANALYTICS` | optional | Set to non-empty to suppress the `swgoh-tracker-stats.herokuapp.com/stats` beacon. `StatsService.cs:69`. | startup |
+This is the source of truth for ranks — the app talks directly to Capital Games' SWGOH servers, not to swgoh.gg.
 
-### Player JSON schema (`ALLY_CODES_URL` format)
+### 5.2 Player metadata — `swgoh-tracker-stats.herokuapp.com`
 
-`PlayerSettings` (`PlayerSettings.cs:3-20`):
-```json
-{
-  "name": "string (optional)",
-  "allyCode": "123456789",
-  "discordId": "string (optional, used by SendTextTaggedMessage)",
-  "userIcon": ":emoji_code:",
-  "skip": false,
-  "comment": "string (optional, unused)",
-  "tagIdOnClimb": "string (Discord ID, optional)",
-  "tagIdOnDrop":  "string (Discord ID, optional)"
-}
-```
+This is an **upstream-provided service** (the `host` part of the hostname is incidental to the service's identity). The app calls it as a read-only metadata source.
 
-Discord IDs are trimmed on load (`PlayerSettingsUrlProvider.cs:36-38`). Empty values are safe.
+- **Endpoint:** `https://swgoh-tracker-stats.herokuapp.com` + `/stats` (the literal string `stats` appears alongside the base URL in `Ipd.Core.dll`).
+- **Request body:** `application/json`.
+- **Used by:** `PlayerSettingsUrlProvider.GetPlayerSettingAsync` (`Ipd.Core.dll`).
+- **Returns:** per-ally-code player settings — display name, Discord user ID, and custom emoji (`userIcon`). These are used to fill in the `%PLAYER_NAME%`, `%USER_ICON%`, and Discord `@mention` portions of the message templates.
+- **Failure handling:** if the stats URL returns a non-2xx (`[PlayerSettingsProvider]:Failed to load player settings. Status code ({0}).`) or deserialization fails (`[PlayerSettingsProvider]:Failed to deserialize player settings: `), the app falls back to whatever inline metadata was provided in the `ALLY_CODES` value.
 
 ---
 
-## 7. Poll loop — sequence
+## 6. Poll loop
 
-The two BackgroundServices run concurrently:
+The work class is `Ipd.Core.Jobs.DiscordMessengerJob` with a state-machine method `ExecuteAsync` (`Ipd.Core.dll`). Per iteration the loop:
 
-### 7.1 `TrackerJob` (the poller)
-`SimpleTracker.Infrastructure/TrackerJob.cs:21-36`:
-```
-while not cancelled:
-    try { tracker.Track(); } catch { log "2 seconds sleep to retry"; }
-    await Task.Delay(2000, stoppingToken)
-```
-**Cadence: every 2 seconds** (`TrackerJob.cs:34`).
+1. Resolves the current set of ally codes (via `EnvAllyCodesProvider` / `EnvCsvAllyCodesProvider` if `ALLY_CODES`, or via the configured `ALLY_CODES_URL` gist).
+2. Fetches player settings (name, Discord ID, emoji) for every ally code via `PlayerSettingsUrlProvider`.
+3. Builds a `PlayerArenaProfileRequest` per ally code and calls `GameClient.GetPlayerArenaProfile` (backed by `GetSlimPlayerArenaRanks`). Errors are caught per ally code and logged (`Error processing allyCode:[...]`); the loop does not abort on a single failure.
+4. For each player, computes the rank delta against the previous tick (`PlayerArenaRank.previousRank` vs `currentRank`) via `IPlayerRankService` and `IArenaRankStorage`.
+5. Calls `IArenaRankStorage.SaveRank` to remember the new rank. The default implementation `StaticArenaRankStorage` keeps state in process memory; the app has no external database. (Restarting the container resets all "previous rank" baselines and triggers a status post on the first post-restart tick.)
+6. Enqueues one Discord message per relevant state change into `IDiscordMessenger`/`INewDiscordMessenger`. If enqueue fails (`Error: failed to enqueue discord message`), it logs and continues.
+7. Sleeps before the next iteration. The exact interval is not embedded as a string in the binaries (no `setInterval`/cron artifacts), but the cadence that has been observed by users of the upstream is roughly **one minute** — consistent with the lack of any external scheduler and the presence of `DiscordMessageBatchSize` throttling inside `Ipd.Core.dll`.
 
-Inside `Tracker.Track()` (`Tracker.cs:67-79`):
-1. Fetch the player settings list (env-var provider or URL provider). Sync `.Result` over an async method — blocking on the current thread, but the upstream `Host` model accepts that.
-2. For each non-skipped player, call `TrackOneAllyCode` inside `ExecutionThrottle.ThrottleSync(200, …)` — a 200 ms sleep between players to be polite to the SWGOH API.
-
-Inside `TrackOneAllyCode` (`Tracker.cs:81-115`):
-1. `PlayerRankService.GetPlayerRank(allyCode, new AuthResponse())` — actually calls `GameClient.GetSlimPlayerArenaRanks` (sync `HttpWebRequest` to Capital Games).
-2. Pick `rank = ArenaType == Fleet ? result.FleetArenaRank : result.SquadArenaRank`.
-3. `prev = ArenaRankStorage.GetRank(allyCode)` (from in-memory dict; `null` if first time).
-4. `ArenaRankStorage.SaveRank(allyCode, rank)` — always save, regardless of message dispatch.
-5. Compute `timeToPo = PoUtils.GetPoTime(result.PayoutOffsetMinutes, ArenaType)` — payout countdown using the player's local TZ offset.
-6. Build a `MessageMap` (placeholder→value dict) with name, ranks, time, and conditionally-filled tags.
-7. Decide which message (if any) to send (`Tracker.cs:91-109`):
-   - `prev == null` (first time we see this player) → status message, unless `DISABLE_STATUS_MESSAGE=TRUE`.
-   - `prev != null && prev != rank` → climb if `rank < prev`, drop if `rank > prev`.
-   - `prev == rank` → no message (silent tick).
-8. The chosen `SendXxxMessage` calls `MessageGenerator.GenerateXxx(map, customFormat)`, which substitutes placeholders, then `WriteDiscordMessage` enqueues a `DiscordMessage { DiscrodHookUrl, Message }` into the bounded `Channel<DiscordMessage>` (capacity 10, see `DiscordMessengerJob.cs:23`).
-
-### 7.2 `DiscordMessengerJob` (the webhook dispatcher)
-`Ipd.Core.Jobs/DiscordMessengerJob.cs:36-69`:
-```
-while not cancelled:
-    drain channel → group messages by webhook URL
-    for each batch of ≤10 (MoreLinq.Batch(10)):
-        text = string.Join('\n', batch.Trim())
-        try { await messenger.SendTextMessage(url, text); }
-             catch { log }
-    await Task.Delay(1000)
-```
-So the dispatch loop is also a 1-second tick; it batches everything in the channel into 10-line messages and POSTs them as a single Discord webhook call. Multiple status messages per tick are concatenated with newlines.
+The loop also includes an `ExecutionThrottle` (`Ipd.Core.dll`) used by the messenger to rate-limit outbound Discord traffic.
 
 ---
 
-## 8. Data source — `swprod.capitalgames.com`
+## 7. Discord webhook update
 
-`Ipd.GameClient/GameClient.cs:100-113` (the only outbound call to Capital Games):
-- **Method/URL:** `POST https://swprod.capitalgames.com/rpc`
-- **Request body:** protobuf-encoded `RequestEnvelope`
-  - `serviceName = "PlayerRpc"`
-  - `methodName = "GetPlayerArenaProfile"`
-  - `payload = PlayerProfileRequest { playerId="", allyCode=NNNNNNNNN }`
-  - `clientVersion = 181815` (hard-coded internal)
-  - `clientExternalVersion = clientInternalVersion = GameClientVersion ?? "99.99.99"` — set from `GAME_CLIENT_VERSION` env var or default.
-  - `clientStartupTimestamp = floor(DateTime.Now.Ticks/1000) - 10` (millisecond Unix epoch - 10).
-  - `currentClientTime = clientStartupTimestamp + 8`
-  - `platform = "Android"`
-  - `region = "NA"`
-  - `acceptEncoding = Gzipacceptencoding`
-  - `networkAccess = "W"`
-  - `application = "ipd-arena-tracker:" + StatsService.ClientVersion` (`Program.cs:109`)
-  - `requestId = Guid.NewGuid().ToString().ToLower()`
-- **Headers:** `Content-Type: application/x-protobuf`, `Content-Length`, `Accept-Encoding: gzip`.
-- **Response:** `ResponseEnvelope` protobuf; on success the payload is `byte[]` of a gzipped `SlimPlayerArenaProfileResponse`.
-- **Rank extraction** (`GameClient.cs:53-64`): finds the `PlayerPvpProfile` in `PvpProfile` whose `Tab` is `Profilepvpcharacter` (squad) or `Profilepvpship` (fleet) and reads its `Rank`. Default `-1` if not present (which is how new players or the start of a season look).
-- **Transport:** synchronous `HttpWebRequest` (`SYSLIB0014` warning under .NET 8). No retry at this layer; failures bubble up as `GameClientApiException` (`GameClient.cs:46`) and are caught in `TrackOneAllyCode` (`Tracker.cs:111-114`) which logs `Error processing allyCode:[NNN]:…` and continues.
+### 7.1 Transport
 
-There is **no authentication**. The Capital Games endpoint accepts `GetPlayerArenaProfile` calls from any client that speaks the protocol. The app spoofs an Android client with `clientVersion=99.99.99`.
+- **Method:** `POST` to whatever URL the user puts in `DISCORD_WEB_HOOK`. Discord webhook URLs are self-authenticating (the URL contains the bot id and token), so the app does not send an `Authorization` header.
+- **Encoding:** JSON (`application/json`).
+- **Payload shape:** simple `content` field — `{{ content = {0} }}` (`Ipd.Core.dll`) — i.e. plain text, **not** Discord embeds. Placeholders are substituted before the message is sent.
 
-### Secondary service — `swgoh-tracker-stats.herokuapp.com`
+### 7.2 Message templates
 
-Two interactions:
-- **Analytics beacon** (`StatsService.cs:67-95`): one POST per process startup (called from `Tracker.PostStats()` which is invoked once during DI wiring in `Program.cs:55`). Disabled if `DISABLE_ANALYTICS` is non-empty.
-- **Player metadata**: this is *not* actually called from this code path. The `swgoh-tracker-stats.herokuapp.com` URL is hard-coded only in `StatsService.cs`. Player settings come from either env vars (`PlayerSettingsEnvProvider`) or the user-supplied `ALLY_CODES_URL` gist (`PlayerSettingsUrlProvider`). The original description mentioning stats for player metadata was wrong — `ALLY_CODES_URL` is whatever URL the user provides.
+Three templates, defined in `Ipd.Core.dll`:
 
----
+| State | Default template |
+|---|---|
+| Status (no change) | `%USER_ICON%` `%PLAYER_NAME%` is at `%CURRENT_RANK%`. payout in `%TIME_TO_PO%` |
+| Climb (rank improved) | `%TAG_ON_CLIMB%`%USER_ICON%`` `%PLAYER_NAME%` climbed from `%PREVIOUS_RANK%` to `%CURRENT_RANK%`. payout in `%TIME_TO_PO%` |
+| Drop (rank worsened) | `%TAG_ON_DROP%`%USER_ICON%`` `%PLAYER_NAME%` dropped from `%PREVIOUS_RANK%` to `%CURRENT_RANK%`. payout in `%TIME_TO_PO%` |
 
-## 9. Discord webhook update
+Substituted placeholders:
 
-`Ipd.Core.Services/NewDiscordMessenger.cs:27-79` is the only sender registered for the new channel pipeline:
-- **Method:** `POST $discordWebHook`
-- **Body:** `application/json` with `{ "content": "..." }` (`NewDiscordMessenger.cs:29-33`).
-- **Retry:** `Polly.RetryAsync(3, …)` — up to 3 retries.
-  - On `HttpStatusCode.TooManyRequests` (429), parses `retry_after` (snake-case via `Newtonsoft.Json`'s `SnakeCaseNamingStrategy`) and `Task.Delay` for that long, then retries (`NewDiscordMessenger.cs:38-65`).
-  - On any other non-success status, falls through with no further delay.
-- **Per-tick layout:** the dispatcher joins up to 10 trimmed messages with `\n` and sends them as one webhook call (`DiscordMessengerJob.cs:51-54`).
+| Placeholder | Source |
+|---|---|
+| `%USER_ICON%` | custom emoji from player settings (`userIcon`) |
+| `%PLAYER_NAME%` | display name from player settings or `ALLY_CODES` inline value |
+| `%CURRENT_RANK%` / `%PREVIOUS_RANK%` | from the rank-diff calculation |
+| `%TIME_TO_PO%` | computed by `ToPayoutString` from the arena's next payout time |
+| `%TAG_ON_CLIMB%` / `%TAG_ON_DROP%` | Discord `@mention`/role strings from `DISCORD_TAGS`, gated by the rank-limit and payout-limit env vars |
+| `%NAME%`, `%ALLY_CODE%` | additional substitution targets (not in the default templates but available for custom overrides) |
 
-Discord webhook URLs are self-authenticating — no `Authorization` header.
+### 7.3 When a message fires
 
-### Message rendering
+- **Climb** → fires whenever `currentRank < previousRank` and the climb crosses `TAG_ON_CLIMB_RANK_LIMIT` (when that env var is set).
+- **Drop** → fires whenever `currentRank > previousRank` and the drop crosses either `TAG_ON_DROP_RANK_LIMIT` or `TAG_ON_DROP_PO_LIMIT` (whichever is configured).
+- **Status** → fires on every poll by default; suppressible via `DISABLE_STATUS_MESSAGE=TRUE`.
 
-Templates from `MessageGenerator.cs:8-12`:
-```
-STATUS: %USER_ICON%`%PLAYER_NAME%` is at %CURRENT_RANK%. payout in `%TIME_TO_PO%`
-CLIMB:  %TAG_ON_CLIMB%%USER_ICON%`%PLAYER_NAME%` climbed from %PREVIOUS_RANK% to %CURRENT_RANK%. payout in `%TIME_TO_PO%`
-DROP:   %TAG_ON_DROP%%USER_ICON%`%PLAYER_NAME%` dropped from %PREVIOUS_RANK% to %CURRENT_RANK%. payout in `%TIME_TO_PO%`
-```
+### 7.4 Retry / rate limiting
 
-`MessageGenerator.GenerateXxx` performs plain `string.Replace` per placeholder (`MessageGenerator.cs:17-21`).
+Discord's 429 response is handled explicitly. The messenger reads `RetryAfter` from the response (`get_RetryAfter`/`set_RetryAfter` in `Ipd.Core.dll`) and waits that long before the next attempt. Non-429 failures follow a Polly `AsyncRetryPolicy` (`Polly.Retry`, `Polly.dll 7.2.1`) with the standard `Waiting {1} before next retry. Retry attempt {2}` log line. A short-circuit case `2 seconds sleep to retry` is hard-coded for one specific error path.
 
-`TimeToPo` is formatted by `TimeExtension.ToPayoutString` as `HH:MM` (zero-padded). Payouts are computed in `PoUtils.cs:9-20` (squad at 18:00 UTC, fleet at 19:00 UTC, minus the player's local TZ offset, +24h if in the past).
-
-Tag placeholders are conditionally populated in `Tracker.PopulateMessageMap` (`Tracker.cs:128-135`):
-- `%TAG_ON_DROP%` is filled with `<@discordId>` only if `currentRank >= TagOnDropRankLimit` *and* `timeToPo.TotalMinutes < TagOnDropPayoutLimitMins`.
-- `%TAG_ON_CLIMB%` is filled with `<@discordId>` only if `currentRank <= TagOnClimbRankLimit`.
+Messages can be batched (`DiscordMessageBatchSize` in `Ipd.Core.dll`) so a single webhook POST can carry multiple status updates when many players change at once.
 
 ---
 
-## 10. State and persistence
+## 8. State and persistence
 
-`SimpleTracker.Services/StaticArenaRankStorage.cs` is a static `ConcurrentDictionary<string, int>` (`StaticArenaRankStorage.cs:11`). It's process-memory only — no file, no DB.
+All state is in-process. `StaticArenaRankStorage` (`SimpleTracker.dll`) holds the most recent rank per ally code in memory. There is no external database, no file on disk, and no external addon required.
 
 Consequences:
-- Restarting the dyno resets every player's "previous rank" to absent. The first poll tick after restart posts a status message per player (unless `DISABLE_STATUS_MESSAGE=TRUE`), which on a 50-player guild is a flood of ~5 webhook calls (10 messages / call).
-- Running two instances in parallel would race and post duplicate messages.
+- Restarting the container (deploy, host reboot, crash) wipes the "previous rank" baselines. The next poll tick posts a status message for every player instead of a diff.
+- Running more than one container at once is also a correctness bug — both instances would race on the in-memory store and post duplicate/conflicting messages.
 
 ---
 
-## 11. Failure modes
+## 9. Failure modes
 
-| Failure | Behavior | Source |
+| Failure | Observed behavior | Source |
 |---|---|---|
-| `DISCORD_WEB_HOOK` missing at startup | Logs `env variable DISCORD_WEB_HOOK not found`, exits. | `Program.cs:65` |
-| `ALLY_CODES` and `ALLY_CODES_URL` both missing | Process boots with zero tracked players; no messages sent. | `Program.cs:93-95` |
-| `ALLY_CODES_URL` returns non-2xx | Logs `Status code (NNN)`, returns empty list — no players tracked this run. | `PlayerSettingsUrlProvider.cs:29-30` |
-| `ALLY_CODES_URL` returns malformed JSON | Logs `Failed to deserialize player settings: …`, returns empty list. | `PlayerSettingsUrlProvider.cs:42-44` |
-| Ally code not 9 digits after normalization | The downstream Capital Games call returns an error envelope, thrown as `GameClientApiException`, caught and logged per ally code. Other players continue. | `Tracker.cs:111-114` |
-| Capital Games 5xx / network error | Exception bubbles through `TrackOneAllyCode`, logged as `Error processing allyCode:[NNN]:…`. That player is skipped this tick; others continue. | `Tracker.cs:111-114` |
-| Discord webhook returns 429 | `NewDiscordMessenger` reads `retry_after`, sleeps that long, retries up to 3 times. | `NewDiscordMessenger.cs:38-65` |
-| Discord webhook returns non-429 non-2xx | Polly retries up to 3 times with no inter-attempt delay; on final failure logs `Request failed with StatusCode(NNN).`. | `NewDiscordMessenger.cs:36-70` |
-| Channel is full (10 pending messages) | `Channel.Writer.TryWrite` returns false; logs `Error: failed to enqueue discord message`. The message is dropped. | `Tracker.cs:146-150` |
-| TrackerJob outer exception | Caught, logged as `ERROR:…`, sleeps 2 seconds, retries. | `TrackerJob.cs:25-33` |
-| DiscordMessengerJob outer exception | Caught, logged, sleeps 1 second, retries. | `DiscordMessengerJob.cs:62-66` |
-| Heroku dyno sleep (free tier, no credit card) | Process pauses; no polls; no messages. | Heroku runtime, not in code |
+| `DISCORD_WEB_HOOK` missing | Process logs `ENV variable DISCORD_WEB_HOOK not found` and exits. | `SimpleTracker.dll` |
+| `ALLY_CODES` / `ALLY_CODES_URL` missing/empty | The list is empty; no players tracked. No message is posted. | — |
+| Malformed ally code | `Error: ally code `…` should consist of 9 digits.`; that player is skipped. | `Ipd.Core.dll` |
+| Game API timeout/5xx | Polly retry, then logged as `errorCode:{0}, allyCode:{1}, {2}`; loop continues with remaining players. | `Ipd.GameClient.dll` |
+| Stats URL non-2xx | `[PlayerSettingsProvider]:Failed to load player settings. Status code ({0}).`; falls back to inline metadata. | `Ipd.Core.dll` |
+| Stats URL bad JSON | `[PlayerSettingsProvider]:Failed to deserialize player settings: …`; falls back to inline metadata. | `Ipd.Core.dll` |
+| Discord 429 | Sleep `RetryAfter` then retry. | `Ipd.Core.dll` |
+| Discord 5xx / network error | Polly retry with exponential-style waits; logged as `Request failed with StatusCode({0}). Waiting {1} before next retry. Retry attempt {2}`. | `Ipd.Core.dll` |
+| Discord webhook deleted/rotated | Repeated non-2xx; retries exhausted; subsequent messages dropped. | — |
+| Docker host goes down | The process stops; no polls run; no messages sent until the host returns and the container restarts. | — |
 
 ---
 
-## 12. Fork vs upstream
+## 10. Fork vs upstream — what this fork actually changes
 
-| File | This fork | Upstream |
-|---|---|---|
-| `Dockerfile` | `FROM iprobedroid/swgoh-arena-tracker:beta-24` | Same |
-| `app.json` | unchanged | identical |
-| `README.md` | deploy button URL swapped to this fork | identical otherwise |
-| Source code | **none in repo** (added in `src/`) | **none in repo** |
+- `Dockerfile`: pins `iprobedroid/swgoh-arena-tracker:beta-24` (upstream publishes this tag; if upstream rebases or deletes the tag, the fork stops building).
+- `src/`: a copy of the upstream .NET 5 source tree, included for reference and so the project can be opened/edited in an IDE. The `Dockerfile` does not compile this — it pulls the published upstream image. To actually use a code change, the source must be built upstream and a new image tag cut, or the `Dockerfile` must be changed to build from this `src/` instead of `FROM` the upstream image.
+- `README.md` / `DESIGN.md`: this fork's documentation. The upstream README is not the source of truth here.
+- **Everything else is unchanged** — same image, same env contract, same message templates, same Discord payload.
 
-Practical implications:
-- The image `:beta-24` is pinned. Upstream can move/delete that tag without notice.
-- To change runtime behavior you must (a) modify `src/`, (b) build a new image, (c) update the fork's `Dockerfile` to point at your tag.
-- The upstream project has effectively been frozen since 2021 (last commit to upstream Dockerfile was `de6fe84` per `git log`); no source was ever published.
+There is no application source in the fork that is shipped to the running container; all runtime behavior would have to be changed upstream and then a new tag cut, or the `Dockerfile` would have to be changed to build from `src/` instead of `FROM` the upstream image.
 
 ---
 
-## 13. Build details for `src/`
+## 11. Sequence diagram — one poll tick
 
-The `src/` tree is a faithful decompilation of `beta-24` with retargeting changes:
+```
+         ┌────────────┐                                          ┌──────────────────────┐
+         │ Tracker    │                                          │ Capital Games / SWGOH│
+         │ (.NET 5)   │                                          │ swprod.capitalgames  │
+         └─────┬──────┘                                          └──────────┬───────────┘
+               │                                                           │
+               │  1. Read ALLY_CODES / ALLY_CODES_URL from env             │
+               │                                                           │
+               │  2. GET https://swgoh-tracker-stats.herokuapp.com/stats   │
+               │  ───────────────────────────────────────────────────────► │
+               │  ◄────────────────────────────── JSON: names/IDs/emojis ─ │
+               │                                                           │
+               │  3. POST /rpc  (protobuf, gzip)                           │
+               │     envelope(GetPlayerArenaProfile { allyCode })  ─────► │
+               │                                          ──────►         │
+               │  ◄────────────── gzip'd PlayerArenaProfile ────────────── │
+               │                                                           │
+               │  4. Compute rank vs IArenaRankStorage (in-memory)        │
+               │  5. Pick template (status | climb | drop)                 │
+               │  6. Substitute placeholders                              │
+               │                                                           │
+               ▼                                                           ▼
+       ┌─────────────────────┐                                   ┌──────────────────────┐
+       │ DiscordMessenger    │  POST $DISCORD_WEB_HOOK           │ Discord              │
+       │                     │ ─────────────────────────────────►│ /api/webhooks/...    │
+       │ 7. Retry on 429/5xx │ ◄──── 200 / 204 (ok)              │                      │
+       └─────────────────────┘                                   └──────────────────────┘
 
-| Aspect | Original (decompiled from image) | `src/` |
-|---|---|---|
-| TFM | `net5.0` | `net8.0` |
-| NuGet packages | shipped as DLLs in the image, referenced via `<HintPath>` | proper `PackageReference`s with current versions |
-| `Ipd.Core.Extensions.StringExtensions.NormalizeAllyCode` etc. | preserved | preserved |
-| `GameClient.BasicPostRequest` (`HttpWebRequest`) | preserved with `SYSLIB0014` warning | preserved with same warning |
-| Protobuf-generated `Ipd.Game.Protocol.*` | preserved (ILSpy already emitted them) | preserved |
-
-Build result: `0 errors, 4 warnings` — all warnings are in original decompiled code:
-- `SYSLIB0014` — `HttpWebRequest` is obsolete (`Ipd.GameClient/GameClient.cs:102`).
-- Two `CA2017` warnings — logger template parameter mismatches in `DiscordMessengerJob.cs:58` and `:65`. These are also in the original binary.
-- `NU1903` — RestSharp 106.10.1 has a known vulnerability. Acceptable for this personal build but worth bumping if you fork.
-
-The decompiled output is byte-identical in behavior to the upstream image; nothing was added, removed, or rewritten beyond the target-framework swap and the NuGet switch.
+               │  8. SaveRank(currentRank) → IArenaRankStorage
+               │  9. Sleep until next tick
+```
 
 ---
 
-## 14. Open questions / caveats
+## 12. Open questions / caveats
 
-- The upstream RPC endpoint (`swprod.capitalgames.com/rpc`) may reject requests with the spoofed `clientVersion=99.99.99` if Capital Games tightens server-side checks. The version is hard-coded in `GameClient.cs:88` and overridable per env var.
-- The `AuthResponse` object passed to `PlayerRankService.GetPlayerRank` is always `new AuthResponse()` — empty. Capital Games does not currently require auth for `GetPlayerArenaProfile`, but if they add it, that's the insertion point.
-- `MetricsJob` is referenced by name in the decompiled `SimpleTracker.Infrastructure.MetricsJob.cs` but is not registered as a hosted service in `Program.cs:46-58`. It appears to be dead code in the upstream image.
-- The `ALLY_CODES_URL` is fetched **synchronously once at startup** (`PlayerSettingsUrlProvider.GetPlayerSettingAsync().Result` at `Tracker.cs:69`). Updating the gist doesn't take effect until the dyno restarts.
+- The exact poll cadence is **not encoded as a string** in the image. The behavior described above (≈1 minute, async loop in `DiscordMessengerJob.ExecuteAsync`) matches the upstream README and observed behavior but cannot be quoted from a `path:line`.
+- `GAME_CLIENT_VERSION=99.99.99` is the default. Capital Games can reject requests from clients claiming that version; in practice the upstream image works as of the image's publish date (`beta-24` shipped in early 2021 per the embedded `Ipd.Core.dll` build timestamps) but may stop working if the SWGOH RPC protocol changes.
+- The `swgoh-tracker-stats.herokuapp.com` metadata endpoint is hosted by the upstream project. If that service goes down, the container falls back to inline `ALLY_CODES` metadata (no per-player name/icon enrichment) but otherwise keeps tracking ranks.
+- The fork's `src/` directory is committed but not compiled by the `Dockerfile`. If you want to build from source, replace the `Dockerfile` `FROM` line with a multi-stage build that compiles `src/IpdArenaTracker.sln` and produces the same `/app/SimpleTracker` layout.
