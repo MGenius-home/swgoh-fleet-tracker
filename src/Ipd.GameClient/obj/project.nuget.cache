@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "Ioci3ivdF1P+D4A3QbmMPcZYAhrzB+xgjg8q7eWH5keA8U2bH4kGo60glDX6EeIlrelVljUG+iH0mn5lh84oLw==",
+  "success": true,
+  "projectFilePath": "/home/michael/projects/ccIPD-arena-tracker/src/Ipd.GameClient/Ipd.GameClient.csproj",
+  "expectedPackageFiles": [
+    "/home/michael/.nuget/packages/google.protobuf/3.27.0/google.protobuf.3.27.0.nupkg.sha512"
+  ],
+  "logs": []
+}

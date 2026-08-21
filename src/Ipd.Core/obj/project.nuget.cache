@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "dgSpecHash": "An9ebJfvURkDf9YNnthBwW2ZG9VRPQj5BjsU3V2XTUX3SeDQely4zPG2aYjdmi+wF1fef2rIuxvdbdRD9qMFBQ==",
+  "success": true,
+  "projectFilePath": "/home/michael/projects/ccIPD-arena-tracker/src/Ipd.Core/Ipd.Core.csproj",
+  "expectedPackageFiles": [
+    "/home/michael/.nuget/packages/google.protobuf/3.27.0/google.protobuf.3.27.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.configuration.abstractions/8.0.0/microsoft.extensions.configuration.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.dependencyinjection.abstractions/8.0.0/microsoft.extensions.dependencyinjection.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.diagnostics.abstractions/8.0.0/microsoft.extensions.diagnostics.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.fileproviders.abstractions/8.0.0/microsoft.extensions.fileproviders.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.hosting.abstractions/8.0.0/microsoft.extensions.hosting.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.logging.abstractions/8.0.0/microsoft.extensions.logging.abstractions.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.options/8.0.0/microsoft.extensions.options.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/microsoft.extensions.primitives/8.0.0/microsoft.extensions.primitives.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/morelinq/3.4.0/morelinq.3.4.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/newtonsoft.json/13.0.3/newtonsoft.json.13.0.3.nupkg.sha512",
+    "/home/michael/.nuget/packages/nodatime/3.1.6/nodatime.3.1.6.nupkg.sha512",
+    "/home/michael/.nuget/packages/polly/7.2.4/polly.7.2.4.nupkg.sha512",
+    "/home/michael/.nuget/packages/restsharp/106.10.1/restsharp.106.10.1.nupkg.sha512",
+    "/home/michael/.nuget/packages/system.diagnostics.diagnosticsource/8.0.0/system.diagnostics.diagnosticsource.8.0.0.nupkg.sha512",
+    "/home/michael/.nuget/packages/system.runtime.compilerservices.unsafe/4.7.1/system.runtime.compilerservices.unsafe.4.7.1.nupkg.sha512"
+  ],
+  "logs": [
+    {
+      "code": "NU1903",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Package 'RestSharp' 106.10.1 has a known high severity vulnerability, https://github.com/advisories/GHSA-9pq7-rcxv-47vq",
+      "libraryId": "RestSharp",
+      "targetGraphs": [
+        "net8.0"
+      ]
+    }
+  ]
+}
