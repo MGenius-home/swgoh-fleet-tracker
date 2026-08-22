@@ -92,6 +92,7 @@ public class DiscordMessengerJob : BackgroundService
 		try
 		{
 			await discordMessenger.SendTextMessage(webHookUrl, textMessage);
+			Console.WriteLine($"[DiscordMessengerJob]:Sent batch of {batch.Count} message(s) ({textMessage.Length} chars).");
 		}
 		catch (Exception ex)
 		{

@@ -54,7 +54,7 @@ internal class Program
 			{
 				Tracker tracker = InitTracker(serviceProvider.GetRequiredService<Channel<DiscordMessage>>(), playerSettingsProvider);
 				tracker.PostStats();
-				return new TrackerJob(tracker, Logger);
+				return new TrackerJob(tracker, Logger, new EnvSettingsService().PollIntervalSeconds);
 			});
 			services.AddSingleton((Func<IServiceProvider, IHostedService>)delegate(IServiceProvider serviceProvider)
 			{
@@ -120,6 +120,7 @@ internal class Program
 		Logger.Log(string.Format("{0}:{1}", "ENABLE_WEEKLY_ATTACK_SUMMARY", envSettingsService.IsWeeklyAttackSummaryEnabled));
 		Logger.Log(string.Format("{0}:{1}", "ENABLE_PAYOUT_TRACKING", envSettingsService.IsPayoutTrackingEnabled));
 		Logger.Log(string.Format("{0}:{1}", "STATUS_MESSAGE_CRON", (string.IsNullOrEmpty(envSettingsService.StatusMessageCron) ? "not set" : envSettingsService.StatusMessageCron)));
+		Logger.Log(string.Format("{0}:{1}", "POLL_INTERVAL_SECONDS", envSettingsService.PollIntervalSeconds));
 		Logger.Log(string.Format("{0}:{1}", "STORAGE_FILE_PATH", envSettingsService.StorageFilePath));
 		Logger.Log(string.Format("{0}:{1}", "PAYOUT_WEBHOOK_URL", (string.IsNullOrEmpty(envSettingsService.PayoutWebHookUrl) ? "not set, falling back to DISCORD_WEB_HOOK" : "set")));
 		FileStorageService fileStorageService = new FileStorageService(envSettingsService.StorageFilePath, Logger);

@@ -26,6 +26,8 @@ public class EnvSettingsService : ISettingsService
 
 	public const string STATUS_MESSAGE_CRON = "STATUS_MESSAGE_CRON";
 
+	public const string POLL_INTERVAL_SECONDS = "POLL_INTERVAL_SECONDS";
+
 	public const string ENABLE_WEEKLY_ATTACK_SUMMARY = "ENABLE_WEEKLY_ATTACK_SUMMARY";
 
 	public const string ENABLE_PAYOUT_TRACKING = "ENABLE_PAYOUT_TRACKING";
@@ -121,6 +123,27 @@ public class EnvSettingsService : ISettingsService
 	}
 
 	public string StatusMessageCron => (Environment.GetEnvironmentVariable("STATUS_MESSAGE_CRON") ?? "").Trim();
+
+	public int PollIntervalSeconds
+	{
+		get
+		{
+			string value = (Environment.GetEnvironmentVariable("POLL_INTERVAL_SECONDS") ?? "").Trim();
+			if (!int.TryParse(value, out var result))
+			{
+				return 15;
+			}
+			if (result < 2)
+			{
+				return 2;
+			}
+			if (result > 3600)
+			{
+				return 3600;
+			}
+			return result;
+		}
+	}
 
 	public string StorageFilePath
 	{

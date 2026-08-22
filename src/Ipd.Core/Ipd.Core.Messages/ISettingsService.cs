@@ -22,6 +22,8 @@ public interface ISettingsService
 
 	string StatusMessageCron { get; }
 
+	int PollIntervalSeconds { get; }
+
 	bool IsWeeklyAttackSummaryEnabled { get; }
 
 	bool IsPayoutTrackingEnabled { get; }

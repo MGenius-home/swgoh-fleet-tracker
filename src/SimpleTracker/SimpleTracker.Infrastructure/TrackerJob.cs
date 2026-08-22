@@ -12,10 +12,14 @@ public class TrackerJob : BackgroundService
 
 	private readonly ILog _logger;
 
-	public TrackerJob(Tracker tracker, ILog logger)
+	private readonly int _pollIntervalMilliseconds;
+
+	public TrackerJob(Tracker tracker, ILog logger, int pollIntervalSeconds)
 	{
 		_tracker = tracker;
 		_logger = logger;
+		_pollIntervalMilliseconds = pollIntervalSeconds * 1000;
+		_logger.Log($"Poll interval: {pollIntervalSeconds} seconds.");
 	}
 
 	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -31,7 +35,7 @@ public class TrackerJob : BackgroundService
 				_logger.Log("ERROR:" + ex.Message);
 				_logger.Log("2 seconds sleep to retry");
 			}
-			await Task.Delay(2000, stoppingToken);
+			await Task.Delay(_pollIntervalMilliseconds, stoppingToken);
 		}
 	}
 }

@@ -91,6 +91,7 @@ All configuration is via environment variables.
 | `PAYOUT_WEBHOOK_URL` | optional | Dedicated webhook for payout shifts, roster posts, and the weekly attack summary. Falls back to `DISCORD_WEB_HOOK`. |
 | `ALLY_CODES_URL` | one of two | HTTPS URL that returns a JSON list of players (the "gist" workflow). |
 | `ALLY_CODES` | one of two | Inline comma-separated ally codes (the simple workflow). Ignored when `ALLY_CODES_URL` is set. |
+| `POLL_INTERVAL_SECONDS` | optional | Seconds between polls of the game server. Default `15`, minimum `2`, maximum `3600`. |
 | `STORAGE_FILE_PATH` | optional | Path for persistent state storage across container updates. Default `/app/data/state.json` inside the container - no configuration needed for a basic setup. |
 | `ENABLE_ANALYTICS` | optional | Set `TRUE` to enable the startup analytics beacon sent to the upstream stats service. Default `FALSE` (off). |
 | `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
