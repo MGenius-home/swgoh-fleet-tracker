@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using Ipd.Core.Interfaces;
 using Ipd.Core.Models;
 
@@ -8,6 +9,12 @@ namespace SimpleTracker.Services;
 
 public class FileStorageService : IPersistentStorageService
 {
+	private const int MaxRetries = 5;
+
+	private const int RetryDelayMilliseconds = 250;
+
+	private const string TempFilePattern = "*.tmp";
+
 	private static readonly object Gate = new object();
 
 	private static readonly JsonSerializerOptions SerializerOptions = new JsonSerializerOptions
@@ -31,19 +38,26 @@ public class FileStorageService : IPersistentStorageService
 	{
 		lock (Gate)
 		{
-			try
+			if (!File.Exists(_path))
 			{
-				if (!File.Exists(_path))
-				{
-					return new TrackerState();
-				}
-				using FileStream stream = File.OpenRead(_path);
-				return JsonSerializer.Deserialize<TrackerState>(stream, SerializerOptions) ?? new TrackerState();
-			}
-			catch (Exception ex)
-			{
-				_logger.Log("[FileStorageService]:Failed to load state from " + _path + ":" + ex.Message + ". Starting with an empty state.");
 				return new TrackerState();
+			}
+			for (int attempt = 1; ; attempt++)
+			{
+				try
+				{
+					using FileStream stream = File.OpenRead(_path);
+					return JsonSerializer.Deserialize<TrackerState>(stream, SerializerOptions) ?? new TrackerState();
+				}
+				catch (Exception ex) when (attempt < MaxRetries)
+				{
+					_logger.Log($"[FileStorageService]:Load attempt {attempt} failed ({ex.Message}). Retrying.");
+					Thread.Sleep(RetryDelayMilliseconds);
+				}
+				catch (Exception ex)
+				{
+					throw new InvalidOperationException($"[FileStorageService]:Could not read state file {_path} after {MaxRetries} attempts: {ex.Message}", ex);
+				}
 			}
 		}
 	}
@@ -52,24 +66,71 @@ public class FileStorageService : IPersistentStorageService
 	{
 		lock (Gate)
 		{
-			try
+			string directory = Path.GetDirectoryName(_path);
+			if (!string.IsNullOrEmpty(directory))
 			{
-				string directory = Path.GetDirectoryName(_path);
-				if (!string.IsNullOrEmpty(directory))
-				{
-					Directory.CreateDirectory(directory);
-				}
-				string tempPath = _path + ".tmp";
-				using (FileStream stream = File.Create(tempPath))
-				{
-					JsonSerializer.Serialize(stream, state, SerializerOptions);
-				}
-				File.Move(tempPath, _path, true);
+				Directory.CreateDirectory(directory);
 			}
-			catch (Exception ex)
+			CleanStaleTempFiles();
+			for (int attempt = 1; ; attempt++)
 			{
-				_logger.Log("[FileStorageService]:Failed to save state to " + _path + ":" + ex.Message);
+				string tempPath = $"{_path}.{Environment.ProcessId}.{attempt}.tmp";
+				try
+				{
+					using (FileStream stream = File.Create(tempPath))
+					{
+						JsonSerializer.Serialize(stream, state, SerializerOptions);
+					}
+					File.Move(tempPath, _path, true);
+					return;
+				}
+				catch (Exception ex) when (attempt < MaxRetries)
+				{
+					_logger.Log($"[FileStorageService]:Save attempt {attempt} failed ({ex.Message}). Retrying.");
+					TryDeleteTemp(tempPath);
+					Thread.Sleep(RetryDelayMilliseconds * attempt);
+				}
+				catch (Exception ex)
+				{
+					TryDeleteTemp(tempPath);
+					_logger.Log($"[FileStorageService]:Failed to save state to {_path} after {MaxRetries} attempts:{ex.Message}");
+					throw;
+				}
 			}
+		}
+	}
+
+	private void CleanStaleTempFiles()
+	{
+		try
+		{
+			string directory = Path.GetDirectoryName(_path);
+			if (string.IsNullOrEmpty(directory))
+			{
+				return;
+			}
+			string[] files = Directory.GetFiles(directory, Path.GetFileName(_path) + "." + TempFilePattern);
+			foreach (string file in files)
+			{
+				TryDeleteTemp(file);
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private void TryDeleteTemp(string tempPath)
+	{
+		try
+		{
+			if (File.Exists(tempPath))
+			{
+				File.Delete(tempPath);
+			}
+		}
+		catch (Exception)
+		{
 		}
 	}
 }

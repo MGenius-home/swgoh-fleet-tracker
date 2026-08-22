@@ -102,6 +102,23 @@ public class Tracker
 			}
 			int currentRank = playerState.CurrentRank;
 			string utcPayoutTime2 = playerState.UtcPayoutTime;
+			if (num <= 0)
+			{
+				if (flag || currentRank <= 0)
+				{
+					return;
+				}
+				Logger.Log("Rank fetch for allyCode:[" + allyCode + "] returned no fleet rank. Keeping last known rank " + currentRank + ".");
+				playerState.PlayerName = result.PlayerName;
+				playerState.UtcPayoutTime = utcPayoutTime;
+				playerState.TimezoneOffsetMinutes = result.PayoutOffsetMinutes;
+				if (_settingService.IsPayoutTrackingEnabled && !string.IsNullOrEmpty(utcPayoutTime2) && utcPayoutTime2 != utcPayoutTime)
+				{
+					SendPayoutShiftMessage(allyCode, result, utcPayoutTime2, utcPayoutTime, trackerState);
+				}
+				Storage.Save(trackerState);
+				return;
+			}
 			playerState.PlayerName = result.PlayerName;
 			playerState.PreviousRank = currentRank;
 			playerState.CurrentRank = num;

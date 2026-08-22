@@ -21,3 +21,10 @@ project.assets.json
 
 ## Logs
 *.log
+
+## Local secrets / test config (never commit)
+.env
+.env.*
+*.env
+test-data/
+test-data*/

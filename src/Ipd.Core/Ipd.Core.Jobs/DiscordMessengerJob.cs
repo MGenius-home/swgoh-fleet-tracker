@@ -10,7 +10,6 @@ using Ipd.Core.Models.Discord;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using MoreLinq;
 
 namespace Ipd.Core.Jobs;
 
@@ -22,7 +21,9 @@ public class DiscordMessengerJob : BackgroundService
 
 	private const int MaxMessagesInChannel = 10;
 
-	private const int DiscordMessageBatchSize = 10;
+	private const int DiscordMessageBatchSize = 25;
+
+	private const int MaxBatchCharacterLength = 1800;
 
 	private readonly Channel<DiscordMessage> _channel;
 
@@ -56,17 +57,24 @@ public class DiscordMessengerJob : BackgroundService
 							_logger.LogError(ex, "Exception");
 						}
 					}
-					foreach (IEnumerable<DiscordMessage> item3 in item.Where((DiscordMessage m) => m.Embed == null).Batch(DiscordMessageBatchSize))
+					List<DiscordMessage> textMessages = item.Where((DiscordMessage m) => m.Embed == null).ToList();
+					List<string> batch = new List<string>();
+					int batchLength = 0;
+					foreach (DiscordMessage message in textMessages)
 					{
-						string textMessage = string.Join('\n', item3.Select((DiscordMessage m) => m.Message.Trim()));
-						try
+						string trimmed = message.Message.Trim();
+						if (batch.Count > 0 && (batch.Count >= DiscordMessageBatchSize || batchLength + trimmed.Length > MaxBatchCharacterLength))
 						{
-							await discordMessenger.SendTextMessage(webHookUrl, textMessage);
+							await SendTextBatch(discordMessenger, webHookUrl, batch);
+							batch.Clear();
+							batchLength = 0;
 						}
-						catch (Exception ex2)
-						{
-							_logger.LogError(ex2, "Exception");
-						}
+						batch.Add(trimmed);
+						batchLength += trimmed.Length + 1;
+					}
+					if (batch.Count > 0)
+					{
+						await SendTextBatch(discordMessenger, webHookUrl, batch);
 					}
 				}
 			}
@@ -75,6 +83,19 @@ public class DiscordMessengerJob : BackgroundService
 				_logger.LogError(ex3, "Exception");
 			}
 			await Task.Delay(1000, stoppingToken);
+		}
+	}
+
+	private static async Task SendTextBatch(INewDiscordMessenger discordMessenger, string webHookUrl, List<string> batch)
+	{
+		string textMessage = string.Join('\n', batch);
+		try
+		{
+			await discordMessenger.SendTextMessage(webHookUrl, textMessage);
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"[DiscordMessengerJob]:Failed to send batch of {batch.Count} messages:{ex.Message}");
 		}
 	}
 }

@@ -78,14 +78,14 @@ public class ScheduledStatusJob : BackgroundService
 		IList<PlayerSettings> playerSettings = await _playerSettingsProvider.GetPlayerSettingAsync();
 		Dictionary<string, PlayerSettings> settingsByAllyCode = playerSettings.GroupBy((PlayerSettings p) => p.AllyCode.NormalizeAllyCode()).ToDictionary((IGrouping<string, PlayerSettings> g) => g.Key, (IGrouping<string, PlayerSettings> g) => g.First());
 		Channel<DiscordMessage> channel = _serviceProvider.GetRequiredService<Channel<DiscordMessage>>();
-		int num = 0;
-		foreach (KeyValuePair<string, PlayerState> item in trackerState.Players)
+		List<KeyValuePair<string, PlayerState>> roster = SortRosterByPayout(trackerState, utcNow);
+		List<string> lines = new List<string>
+		{
+			"**Fleet payout order** (soonest first):"
+		};
+		foreach (KeyValuePair<string, PlayerState> item in roster)
 		{
 			PlayerState value = item.Value;
-			if (value == null || value.CurrentRank <= 0)
-			{
-				continue;
-			}
 			settingsByAllyCode.TryGetValue(item.Key, out PlayerSettings value2);
 			PlayerSettings playerSettings2 = value2 ?? new PlayerSettings
 			{
@@ -93,22 +93,56 @@ public class ScheduledStatusJob : BackgroundService
 			};
 			Duration poTime = PoUtils.GetPoTime(value.TimezoneOffsetMinutes, Instant.FromDateTimeUtc(utcNow));
 			MessageMap messageMap = Tracker.PopulateMessageMap(playerSettings2, value.PlayerName, value.PreviousRank, value.CurrentRank, poTime, _settings);
-			string textMessage = MessageGenerator.GenerateStatusMessage(messageMap, _settings.MessageFormatOnStatus);
+			lines.Add(MessageGenerator.GenerateStatusMessage(messageMap, _settings.MessageFormatOnStatus));
+		}
+		int enqueued = 0;
+		foreach (string postBody in ChunkPost(lines))
+		{
 			DiscordMessage discordMessage = new DiscordMessage
 			{
 				DiscrodHookUrl = payoutWebHook,
-				Message = textMessage
+				Message = postBody
 			};
 			if (!channel.Writer.TryWrite(discordMessage))
 			{
 				_logger.Log("Error: failed to enqueue discord message");
 			}
-			num++;
+			enqueued++;
 		}
 		trackerState.LastScheduledStatusPost = utcNow;
 		_storage.Save(trackerState);
-		_logger.Log($"[ScheduledStatusJob]:Enqueued {num} roster status messages.");
+		_logger.Log($"[ScheduledStatusJob]:Enqueued roster post ({roster.Count} players, sorted by time to payout) as {enqueued} message(s).");
 		await Task.CompletedTask;
+	}
+
+	public static List<KeyValuePair<string, PlayerState>> SortRosterByPayout(TrackerState state, DateTime utcNow)
+	{
+		return (from item in state.Players
+			where item.Value != null && item.Value.CurrentRank > 0
+			let poTime = PoUtils.GetPoTime(item.Value.TimezoneOffsetMinutes, Instant.FromDateTimeUtc(utcNow))
+			orderby poTime.TotalMinutes, item.Value.CurrentRank
+			select item).ToList();
+	}
+
+	private static IEnumerable<string> ChunkPost(IList<string> lines)
+	{
+		List<string> current = new List<string>();
+		int length = 0;
+		foreach (string line in lines)
+		{
+			if (current.Count > 0 && (current.Count >= 25 || length + line.Length + 1 > 1800))
+			{
+				yield return string.Join("\n", current);
+				current.Clear();
+				length = 0;
+			}
+			current.Add(line);
+			length += line.Length + 1;
+		}
+		if (current.Count > 0)
+		{
+			yield return string.Join("\n", current);
+		}
 	}
 
 	private string GetPayoutWebHook()
