@@ -27,6 +27,9 @@ services:
 
     volumes:
       - swgoh-fleet-tracker-data:/app/data
+      # Bind-mount alternative (make the host dir writable by uid 1654 first):
+      #   docker run --rm --user 0 -v /host/path/swgoh-fleet-tracker:/data busybox chown -R 1654:1654 /data
+      # - /host/path/swgoh-fleet-tracker:/app/data
 
 volumes:
   swgoh-fleet-tracker-data:

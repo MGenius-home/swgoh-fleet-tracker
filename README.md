@@ -115,7 +115,7 @@ Climb and drop alerts are posted here whenever a tracked player's fleet arena ra
 | `TAG_ON_CLIMB_RANK_LIMIT` | `1000` | `%TAG_ON_CLIMB%` mentions render only while the player's rank number is at or below this value (inside the top N). |
 | `TAG_ON_DROP_RANK_LIMIT` | `0` | `%TAG_ON_DROP%` mentions render only when the player's rank number is at or above this value (fell to position N or worse). |
 | `TAG_ON_DROP_PO_LIMIT` | `1440` | Time-to-payout threshold (minutes) for drop-side tagging. |
-| `DISCORD_TAGS` | - | Discord role IDs / user IDs to mention on tag-worthy events. |
+| `DISCORD_TAGS` | - | Mentions for the simple `ALLY_CODES` workflow: comma-separated `allyCode|discordUserId` pairs, e.g. `116563768|123456789012345678,222333444|987654321098765432`. Gist users should instead set `tagIdOnClimb` / `tagIdOnDrop` per player in the JSON. |
 
 ## `PAYOUT_WEBHOOK_URL` features
 
@@ -202,6 +202,8 @@ CUSTOM_MESSAGE_DROP: "<:b_down:806635945469280276> Fleet-[%PLAYER_NAME%](<https:
 Notes:
 
 - Mentions are driven by the placeholders. If your template does not contain `%TAG_ON_CLIMB%` / `%TAG_ON_DROP%`, players are never pinged regardless of the `TAG_ON_*_RANK_LIMIT` values. Add the placeholder to enable pings; the limits then decide *when* they fire.
+- The mention id resolves per player: a gist's `tagIdOnClimb`/`tagIdOnDrop` first, otherwise the `DISCORD_TAGS` mapping (simple workflow), otherwise no mention.
+- Alerts fire on rank *changes*. A player being attacked repeatedly without their rank changing produces no message.
 - `%PLAYER_NAME%` comes straight from the game API. For stable names/links across name changes, per-player settings from an `ALLY_CODES_URL` gist (`name`) are a better fit.
 
 ### Migrating from `iprobedroid/swgoh-arena-tracker:beta-24`
@@ -222,6 +224,16 @@ Be aware: if you remove the container (`docker rm` / `docker compose down --remo
 ```bash
 -v swgoh-fleet-tracker-data:/app/data
 ```
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Repeated `Access to the path '/app/data/...' is denied` in logs | You bind-mounted a host directory over `/app/data` without fixing ownership. The container runs as uid `1654`: `docker run --rm --user 0 -v /host/path:/data busybox chown -R 1654:1654 /data`. Named volumes avoid this entirely. |
+| No climb/drop messages at all | Ranks may genuinely be unchanged - alerts fire on rank *changes* only, not on every attack. Check the last-known vs current rank in `state.json`. |
+| Mentions (`@player`) never appear | The template must contain `%TAG_ON_CLIMB%`/`%TAG_ON_DROP%`, and an id must resolve (gist `tagIdOn*` fields or `DISCORD_TAGS`). |
+| Roster / summary posts missing | These are opt-in: set `STATUS_MESSAGE_CRON`, and `ENABLE_WEEKLY_ATTACK_SUMMARY=TRUE` (+ cron). Check startup logs for the `Scheduled with schedule:` lines or a "disabled" notice. |
+| `ALLY_CODES_URL` players ignored | The URL wins over `ALLY_CODES`; if it returns non-200 or bad JSON, the tracker falls back to an empty list for that tick. Test the URL in a browser. |
 
 ## Example `ALLY_CODES` workflow
 

@@ -186,13 +186,24 @@ public class Tracker
 		double totalMinutes = timeToPo.TotalMinutes;
 		if (currentRank >= settingService.TagOnDropRankLimit && totalMinutes < (double)settingService.TagOnDropPayoutLimitMins)
 		{
-			messageMap.TagOnDrop = (string.IsNullOrEmpty((playerSettings?.TagIdOnDrop?.Trim() ?? "").Trim()) ? "" : ("<@" + playerSettings.TagIdOnDrop.Trim() + ">"));
+			messageMap.TagOnDrop = TagFor(playerSettings?.TagIdOnDrop, playerSettings?.DiscordId);
 		}
 		if (currentRank <= settingService.TagOnClimbRankLimit)
 		{
-			messageMap.TagOnClimb = (string.IsNullOrEmpty((playerSettings?.TagIdOnClimb?.Trim() ?? "").Trim()) ? "" : ("<@" + playerSettings.TagIdOnClimb.Trim() + ">"));
+			messageMap.TagOnClimb = TagFor(playerSettings?.TagIdOnClimb, playerSettings?.DiscordId);
 		}
 		return messageMap;
+	}
+
+	private static string TagFor(string perPlayerTagId, string discordId)
+	{
+		string tagId = (!string.IsNullOrWhiteSpace(perPlayerTagId) ? perPlayerTagId : discordId) ?? "";
+		tagId = tagId.Trim();
+		if (string.IsNullOrEmpty(tagId))
+		{
+			return "";
+		}
+		return "<@" + tagId + ">";
 	}
 
 	private MessageMap PopulateMessageMap(PlayerSettings playerSettings, string playerName, int prevRank, int currentRank, Duration timeToPo)
