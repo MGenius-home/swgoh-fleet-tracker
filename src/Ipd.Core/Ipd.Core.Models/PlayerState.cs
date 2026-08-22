@@ -12,6 +12,8 @@ public class PlayerState
 
 	public string UtcPayoutTime { get; set; }
 
+	public string PendingUtcPayoutTime { get; set; }
+
 	public int TimezoneOffsetMinutes { get; set; }
 
 	public int WeeklyAttacks { get; set; }

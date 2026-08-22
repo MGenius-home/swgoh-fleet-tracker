@@ -110,19 +110,19 @@ public class Tracker
 				}
 				Logger.Log("Rank fetch for allyCode:[" + allyCode + "] returned no fleet rank. Keeping last known rank " + currentRank + ".");
 				playerState.PlayerName = result.PlayerName;
-				playerState.UtcPayoutTime = utcPayoutTime;
 				playerState.TimezoneOffsetMinutes = result.PayoutOffsetMinutes;
-				if (_settingService.IsPayoutTrackingEnabled && !string.IsNullOrEmpty(utcPayoutTime2) && utcPayoutTime2 != utcPayoutTime)
-				{
-					SendPayoutShiftMessage(allyCode, result, utcPayoutTime2, utcPayoutTime, trackerState);
-				}
 				Storage.Save(trackerState);
 				return;
 			}
+			bool shiftConfirmed = !flag && RegisterPayoutObservation(playerState, utcPayoutTime);
 			playerState.PlayerName = result.PlayerName;
 			playerState.PreviousRank = currentRank;
 			playerState.CurrentRank = num;
-			playerState.UtcPayoutTime = utcPayoutTime;
+			if (shiftConfirmed || string.IsNullOrEmpty(utcPayoutTime2))
+			{
+				playerState.UtcPayoutTime = utcPayoutTime;
+				playerState.PendingUtcPayoutTime = null;
+			}
 			playerState.TimezoneOffsetMinutes = result.PayoutOffsetMinutes;
 			if (flag)
 			{
@@ -146,7 +146,7 @@ public class Tracker
 					SendDropMessage(map, setting);
 				}
 			}
-			if (_settingService.IsPayoutTrackingEnabled && !flag && !string.IsNullOrEmpty(utcPayoutTime2) && utcPayoutTime2 != utcPayoutTime)
+			if (_settingService.IsPayoutTrackingEnabled && shiftConfirmed && !string.IsNullOrEmpty(utcPayoutTime2))
 			{
 				SendPayoutShiftMessage(allyCode, result, utcPayoutTime2, utcPayoutTime, trackerState);
 			}
@@ -156,6 +156,21 @@ public class Tracker
 		{
 			Logger.Log("Error processing allyCode:[" + setting.AllyCode + "]:" + ex.Message);
 		}
+	}
+
+	public static bool RegisterPayoutObservation(PlayerState playerState, string newUtcPayoutTime)
+	{
+		if (playerState.UtcPayoutTime == newUtcPayoutTime)
+		{
+			playerState.PendingUtcPayoutTime = null;
+			return false;
+		}
+		if (!string.IsNullOrEmpty(playerState.PendingUtcPayoutTime) && playerState.PendingUtcPayoutTime == newUtcPayoutTime)
+		{
+			return true;
+		}
+		playerState.PendingUtcPayoutTime = newUtcPayoutTime;
+		return false;
 	}
 
 	public static MessageMap PopulateMessageMap(PlayerSettings playerSettings, string playerName, int prevRank, int currentRank, Duration timeToPo, ISettingsService settingService)
