@@ -9,13 +9,13 @@ Built from the .NET 8 source in `src/` (a fork of the upstream [`iprobedroid/swg
 This project stands on the shoulders of:
 
 - [iprobedroid/swgoh-arena-tracker](https://github.com/iprobedroid/swgoh-arena-tracker) - the upstream project; the .NET tracker source in `src/` and the original Docker image are based on its work.
-- [DV1231/ccIPD-Arena-Tracker](https://github.com/DV1231/ccIPD-Arena-Tracker) - the original ccIPD Arena Tracker (GPL-3.0) that the upstream project itself grew out of; this repo keeps its name.
+- [DV1231/ccIPD-Arena-Tracker](https://github.com/DV1231/ccIPD-Arena-Tracker) - the original ccIPD Arena Tracker (GPL-3.0) that this project descends from.
 - [iprobedroid's Discord channel](https://discord.gg/xcjvKPM) - community support channel for the tracker family.
 
 ## Build
 
 ```bash
-docker build -t ccIPD-arena-tracker .
+docker build -t swgoh-arena-tracker .
 ```
 
 The image is compiled from this repo's source using the official .NET 8 SDK (multi-stage build).
@@ -37,7 +37,7 @@ docker run -d --name swgoh-arena-tracker \
   -e ARENA_TYPE="SQUAD" \
   -v swgoh-tracker-data:/app/data \
   --restart unless-stopped \
-  ccIPD-arena-tracker
+  swgoh-arena-tracker
 ```
 
 ### Notes
@@ -198,7 +198,7 @@ docker run -d --name swgoh-arena-tracker \
   -e DISCORD_WEB_HOOK="https://discord.com/api/webhooks/..." \
   -e ALLY_CODES="123456789,123456788,123456999" \
   --restart unless-stopped \
-  ccIPD-arena-tracker
+  swgoh-arena-tracker
 ```
 
 ## Example `ALLY_CODES_URL` workflow
@@ -210,7 +210,7 @@ docker run -d --name swgoh-arena-tracker \
   -e DISCORD_WEB_HOOK="https://discord.com/api/webhooks/..." \
   -e ALLY_CODES_URL="https://gist.github.com/<user>/<id>/raw" \
   --restart unless-stopped \
-  ccIPD-arena-tracker
+  swgoh-arena-tracker
 ```
 
 ## Discord

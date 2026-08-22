@@ -1,7 +1,7 @@
 services:
   swgoh-arena-tracker:
     build: .
-    # image: ghcr.io/MGenius-home/ccipd-arena-tracker:latest   # use instead of build once published
+    # image: ghcr.io/MGenius-home/swgoh-arena-tracker:latest   # use instead of build once published
     container_name: swgoh-arena-tracker
     restart: unless-stopped
     environment:

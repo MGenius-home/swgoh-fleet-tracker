@@ -1,6 +1,6 @@
-# ccIPD-arena-tracker — Design Document
+# swgoh-arena-tracker — Design Document
 
-A design document for the fork [`MGenius-home/ccIPD-arena-tracker`](https://github.com/MGenius-home/ccIPD-arena-tracker), which wraps [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker) (upstream source) as a Docker image built from the pinned upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
+A design document for the fork [`MGenius-home/swgoh-arena-tracker`](https://github.com/MGenius-home/swgoh-arena-tracker) (formerly `MGenius-home/ccIPD-arena-tracker`), which wraps [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker) (upstream source) as a Docker image built from the pinned upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
 
 All factual claims below are grounded in either:
 - this fork's own files (`Dockerfile`, `README.md`), or
