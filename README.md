@@ -2,7 +2,7 @@
 
 A long-running worker that polls Star Wars: Galaxy of Heroes (SWGOH) **fleet arena** rankings for a configured list of players and posts Discord notifications when their ranks change.
 
-> Squad arena has been removed from the game, so this tracker is fleet-only. Fleet payouts happen at 19:00 local time; the old `ARENA_TYPE` variable is no longer needed and is ignored.
+> Squad arena will be removed from the game shortly, so this tracker is fleet-only. The old `ARENA_TYPE` variable is no longer needed and is ignored.
 
 Built from the .NET 8 source in `src/` (a fork of the upstream [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker)) with payout-shift tracking, scheduled roster posts, weekly attack metrics, file-based state persistence, and multi-arch images for x86 and Raspberry Pi.
 
@@ -121,7 +121,7 @@ Climb and drop alerts are posted here whenever a tracked player's fleet arena ra
 
 ### Payout tracking
 
-Each poll reads the player's local timezone offset from the game API and derives the UTC payout slot as `(19:00 local - timezone offset) mod 24h`. When a player's derived UTC payout time changes, an embed notification is sent containing:
+Fleet arena pays out at 19:00 in **each player's own local timezone**, so every tracked player has a different payout moment in UTC. Each poll reads the player's local timezone offset from the game API and derives that player's UTC payout slot as `(19:00 local - timezone offset) mod 24h`. When a player's derived UTC payout time changes (typically because they changed their game/device timezone), an embed notification is sent containing:
 
 - The player name / ally code.
 - The shift delta (+/-X hours).
