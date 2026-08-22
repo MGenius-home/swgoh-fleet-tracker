@@ -64,9 +64,24 @@ public class StatsService : IStatsService
 		return "FAILED_TO_GET_DISCORD_WEB_HOOK";
 	}
 
+	public const string ENABLE_ANALYTICS = "ENABLE_ANALYTICS";
+
+	public static bool IsAnalyticsEnabled
+	{
+		get
+		{
+			string value = (Environment.GetEnvironmentVariable("ENABLE_ANALYTICS") ?? "").Trim();
+			if (value != null)
+			{
+				return value.Equals("TRUE", StringComparison.InvariantCultureIgnoreCase);
+			}
+			return false;
+		}
+	}
+
 	public void PostStats(string arenaType, int totalPlayersCount, List<string> allyCodes)
 	{
-		if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DISABLE_ANALYTICS") ?? ""))
+		if (!IsAnalyticsEnabled)
 		{
 			return;
 		}

@@ -69,7 +69,7 @@ All configuration is via environment variables.
 | `ALLY_CODES` | one of two | Inline comma-separated ally codes (the simple workflow). Ignored when `ALLY_CODES_URL` is set. |
 | `ARENA_TYPE` | optional | `SQUAD` (default) or `FLEET` - selects which arena rank column to track. Squad payouts are at 18:00 local, fleet at 19:00 local. |
 | `STORAGE_FILE_PATH` | optional | Path for persistent state storage across container updates. Default `/app/data/state.json` inside the container - no configuration needed for a basic setup. |
-| `DISABLE_ANALYTICS` | optional | Set `TRUE` to opt out of analytics beacons. |
+| `ENABLE_ANALYTICS` | optional | Set `TRUE` to enable the startup analytics beacon sent to the upstream stats service. Default `FALSE` (off). |
 | `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
 | `LOGGER_HOOK` | conditional | Discord webhook for the logger when `LOGGER_TYPE=DISCORD`. |
 | `GAME_CLIENT_VERSION` | optional | Override the spoofed SWGOH client version (default `99.99.99`). |

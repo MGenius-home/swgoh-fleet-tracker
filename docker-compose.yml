@@ -18,6 +18,7 @@ services:
       # ENABLE_WEEKLY_ATTACK_SUMMARY: "TRUE"      # weekly attack leaderboard + counter reset
       # WEEKLY_ATTACK_SUMMARY_CRON: "SUNDAY 18:00"  # e.g. "FRIDAY 19:00", "DAILY 12:00", "HOURLY", "WEEKLY", or cron "0 0 * * 0"
       # STATUS_MESSAGE_CRON: "DAILY 04:00"        # scheduled roster post (rank + time-to-payout), e.g. "HOURLY", "SUNDAY 18:00", cron "0 4 * * *"
+      # ENABLE_ANALYTICS: "TRUE"                  # send startup analytics beacon to the upstream stats service
       STORAGE_FILE_PATH: "/app/data/state.json"
       # Optional tuning
       # TAG_ON_CLIMB_RANK_LIMIT: "50"
