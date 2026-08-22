@@ -14,6 +14,9 @@ FROM mcr.microsoft.com/dotnet/runtime:8.0-noble-chiseled
 WORKDIR /app
 COPY --from=build-env /app/out .
 COPY --from=build-env --chown=1654:1654 /app/data /app/data
+
+# Timezone database so SCHEDULE_TIMEZONE works (chiseled base ships without one)
+COPY --from=build-env /usr/share/zoneinfo /usr/share/zoneinfo
 VOLUME ["/app/data"]
 
 ENTRYPOINT ["dotnet", "SimpleTracker.dll"]

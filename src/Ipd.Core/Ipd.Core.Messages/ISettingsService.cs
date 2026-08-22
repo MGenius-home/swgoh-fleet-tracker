@@ -24,6 +24,8 @@ public interface ISettingsService
 
 	int PollIntervalSeconds { get; }
 
+	string ScheduleTimeZoneId { get; }
+
 	bool IsWeeklyAttackSummaryEnabled { get; }
 
 	bool IsPayoutTrackingEnabled { get; }

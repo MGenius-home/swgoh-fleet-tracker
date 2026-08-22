@@ -92,6 +92,7 @@ All configuration is via environment variables.
 | `ALLY_CODES_URL` | one of two | HTTPS URL that returns a JSON list of players (the "gist" workflow). |
 | `ALLY_CODES` | one of two | Inline comma-separated ally codes (the simple workflow). Ignored when `ALLY_CODES_URL` is set. |
 | `POLL_INTERVAL_SECONDS` | optional | Seconds between polls of the game server. Default `15`, minimum `2`, maximum `3600`. |
+| `SCHEDULE_TIMEZONE` | optional | IANA time zone used to evaluate `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` (e.g. `America/New_York`). Default `UTC`. DST changes are handled automatically. |
 | `STORAGE_FILE_PATH` | optional | Path for persistent state storage across container updates. Default `/app/data/state.json` inside the container - no configuration needed for a basic setup. |
 | `ENABLE_ANALYTICS` | optional | Set `TRUE` to enable the startup analytics beacon sent to the upstream stats service. Default `FALSE` (off). |
 | `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
@@ -153,7 +154,9 @@ Off by default. Rank climbs observed during polls increment a per-player weekly 
 
 ### Schedules
 
-Both `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` accept either a friendly schedule or a standard 5-field cron expression. All times are **UTC**.
+Both `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` accept either a friendly schedule or a standard 5-field cron expression.
+
+By default schedules are evaluated in **UTC**. Set `SCHEDULE_TIMEZONE` (IANA name) to evaluate them in your local wall-clock time instead - for example, with `SCHEDULE_TIMEZONE=America/New_York`, `"SUNDAY 16:00"` fires every Sunday at 4:00 PM Eastern, correctly across daylight-saving changes.
 
 | Format | Example | Meaning |
 |---|---|---|
@@ -164,9 +167,10 @@ Both `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` accept either a frie
 | `WEEKLY` | `WEEKLY` | Sunday at midnight |
 | cron expression | `0 0 * * 0`, `30 9 * * 1-5` | Full cron syntax (`minute hour day-of-month month day-of-week`) |
 
-Day names can be written in full (`SUNDAY`) or abbreviated (`SUN`). For example, to post the attack summary every Friday evening:
+Day names can be written in full (`SUNDAY`) or abbreviated (`SUN`). For example, to post the attack summary every Friday evening in Eastern time:
 
 ```yaml
+SCHEDULE_TIMEZONE: "America/New_York"
 WEEKLY_ATTACK_SUMMARY_CRON: "FRIDAY 19:00"
 ```
 
@@ -204,7 +208,7 @@ Notes:
 
 - `ARENA_TYPE` is gone: squad arena no longer exists in the game, so this fork tracks fleet only. Remove the variable from your compose.
 - `CUSTOM_MESSAGE_STATUS` still works, but it now drives the opt-in **scheduled roster post** (`STATUS_MESSAGE_CRON`) instead of firing automatically on every container start.
-- `PUID` / `PGID` / `TZ` are not needed by this image and are ignored. All scheduling and payout math is done in UTC internally, so `TZ` does not change tracker behavior.
+- `PUID` / `PGID` / `TZ` are not needed by this image and are ignored. All payout math is done in UTC internally; use `SCHEDULE_TIMEZONE` to control the schedule clock.
 - This image runs as a non-root user (uid `1654`). If you bind-mount a host directory over `/app/data`, make it writable by that uid (named volumes handle ownership automatically).
 
 ## State persistence

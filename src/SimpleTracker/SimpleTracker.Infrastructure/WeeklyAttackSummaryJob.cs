@@ -47,12 +47,13 @@ public class WeeklyAttackSummaryJob : BackgroundService
 			return;
 		}
 		CronExpression cronExpression = CronExpression.ParseSchedule(_settings.WeeklyAttackSummaryCron);
-		_logger.Log("[WeeklyAttackSummaryJob]:Scheduled with schedule:" + _settings.WeeklyAttackSummaryCron);
+		TimeZoneInfo zone = ScheduleTimeZone.Resolve(_settings.ScheduleTimeZoneId, message => _logger.Log(message));
+		_logger.Log($"[WeeklyAttackSummaryJob]:Scheduled with schedule:{_settings.WeeklyAttackSummaryCron} (timezone:{zone.Id})");
 		while (!stoppingToken.IsCancellationRequested)
 		{
 			try
 			{
-				await RunOnce(DateTime.UtcNow, cronExpression);
+				await RunOnce(DateTime.UtcNow, cronExpression, zone);
 			}
 			catch (Exception ex)
 			{
@@ -62,9 +63,10 @@ public class WeeklyAttackSummaryJob : BackgroundService
 		}
 	}
 
-	private async Task RunOnce(DateTime utcNow, CronExpression cronExpression)
+	private async Task RunOnce(DateTime utcNow, CronExpression cronExpression, TimeZoneInfo zone)
 	{
-		if (!cronExpression.IsMatch(utcNow))
+		DateTime localNow = ScheduleTimeZone.NowInZone(zone);
+		if (!cronExpression.IsMatch(localNow))
 		{
 			return;
 		}

@@ -145,6 +145,19 @@ public class EnvSettingsService : ISettingsService
 		}
 	}
 
+	public string ScheduleTimeZoneId
+	{
+		get
+		{
+			string value = (Environment.GetEnvironmentVariable("SCHEDULE_TIMEZONE") ?? "").Trim();
+			if (!string.IsNullOrEmpty(value))
+			{
+				return value;
+			}
+			return "UTC";
+		}
+	}
+
 	public string StorageFilePath
 	{
 		get

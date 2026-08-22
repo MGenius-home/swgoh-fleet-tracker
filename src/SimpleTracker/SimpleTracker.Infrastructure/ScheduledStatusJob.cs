@@ -47,12 +47,13 @@ public class ScheduledStatusJob : BackgroundService
 			return;
 		}
 		CronExpression cronExpression = CronExpression.ParseSchedule(_settings.StatusMessageCron);
-		_logger.Log("[ScheduledStatusJob]:Scheduled with schedule:" + _settings.StatusMessageCron);
+		TimeZoneInfo zone = ScheduleTimeZone.Resolve(_settings.ScheduleTimeZoneId, message => _logger.Log(message));
+		_logger.Log($"[ScheduledStatusJob]:Scheduled with schedule:{_settings.StatusMessageCron} (timezone:{zone.Id})");
 		while (!stoppingToken.IsCancellationRequested)
 		{
 			try
 			{
-				await RunOnce(DateTime.UtcNow, cronExpression, stoppingToken);
+				await RunOnce(DateTime.UtcNow, cronExpression, zone, stoppingToken);
 			}
 			catch (Exception ex)
 			{
@@ -62,9 +63,10 @@ public class ScheduledStatusJob : BackgroundService
 		}
 	}
 
-	private async Task RunOnce(DateTime utcNow, CronExpression cronExpression, CancellationToken stoppingToken)
+	private async Task RunOnce(DateTime utcNow, CronExpression cronExpression, TimeZoneInfo zone, CancellationToken stoppingToken)
 	{
-		if (!cronExpression.IsMatch(utcNow))
+		DateTime localNow = ScheduleTimeZone.NowInZone(zone);
+		if (!cronExpression.IsMatch(localNow))
 		{
 			return;
 		}
