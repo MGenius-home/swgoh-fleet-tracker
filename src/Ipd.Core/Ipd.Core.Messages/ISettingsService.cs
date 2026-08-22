@@ -8,11 +8,23 @@ public interface ISettingsService
 
 	string MessageFormatOnDrop { get; }
 
-	bool IsStatusMessageDisabled { get; }
-
 	int TagOnDropRankLimit { get; }
 
 	int TagOnClimbRankLimit { get; }
 
 	int TagOnDropPayoutLimitMins { get; }
+
+	string PayoutWebHookUrl { get; }
+
+	bool PostFullPayoutListOnChange { get; }
+
+	string WeeklyAttackSummaryCron { get; }
+
+	string StatusMessageCron { get; }
+
+	bool IsWeeklyAttackSummaryEnabled { get; }
+
+	bool IsPayoutTrackingEnabled { get; }
+
+	string StorageFilePath { get; }
 }

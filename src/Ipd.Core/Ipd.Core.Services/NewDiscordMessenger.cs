@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Ipd.Core.Interfaces;
+using Ipd.Core.Models.Discord;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Polly;
@@ -19,18 +20,25 @@ public class NewDiscordMessenger : INewDiscordMessenger
 		_httpClient = httpClient;
 	}
 
-	public async Task SendTextMessage(string webHookUrl, string textMessage)
+	public Task<bool> SendTextMessage(string webHookUrl, string textMessage)
 	{
-		await SendMessage(webHookUrl, textMessage);
-	}
-
-	private async Task SendMessage(string discordWebHook, string textMessage)
-	{
-		var value = new
+		return SendMessage(webHookUrl, new
 		{
 			content = textMessage
-		};
-		StringContent content = new StringContent(JsonConvert.SerializeObject(value), Encoding.UTF8, "application/json");
+		});
+	}
+
+	public Task<bool> SendEmbedMessage(string webHookUrl, DiscordEmbed embed)
+	{
+		return SendMessage(webHookUrl, new
+		{
+			embeds = new[] { embed }
+		});
+	}
+
+	private async Task<bool> SendMessage(string discordWebHook, object payload)
+	{
+		StringContent content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
 		try
 		{
 			HttpResponseMessage httpResponseMessage = await Policy.HandleResult((HttpResponseMessage r) => !r.IsSuccessStatusCode).RetryAsync(3, async delegate(DelegateResult<HttpResponseMessage> result, int retryCount, Context context)
@@ -67,7 +75,9 @@ public class NewDiscordMessenger : INewDiscordMessenger
 			if (!httpResponseMessage.IsSuccessStatusCode)
 			{
 				Console.WriteLine($"[DiscordMessenger]:Request failed with StatusCode({httpResponseMessage.StatusCode}).");
+				return false;
 			}
+			return true;
 		}
 		finally
 		{

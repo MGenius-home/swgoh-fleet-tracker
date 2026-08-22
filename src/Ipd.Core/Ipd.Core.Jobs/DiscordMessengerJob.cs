@@ -45,24 +45,34 @@ public class DiscordMessengerJob : BackgroundService
 				foreach (IGrouping<string, DiscordMessage> item in enumerable)
 				{
 					string webHookUrl = item.First().DiscrodHookUrl;
-					IEnumerable<IEnumerable<DiscordMessage>> enumerable2 = item.Batch(10);
-					foreach (IEnumerable<DiscordMessage> item2 in enumerable2)
+					foreach (DiscordMessage item2 in item.Where((DiscordMessage m) => m.Embed != null))
 					{
-						string textMessage = string.Join('\n', item2.Select((DiscordMessage m) => m.Message.Trim()));
+						try
+						{
+							await discordMessenger.SendEmbedMessage(webHookUrl, item2.Embed);
+						}
+						catch (Exception ex)
+						{
+							_logger.LogError(ex, "Exception");
+						}
+					}
+					foreach (IEnumerable<DiscordMessage> item3 in item.Where((DiscordMessage m) => m.Embed == null).Batch(DiscordMessageBatchSize))
+					{
+						string textMessage = string.Join('\n', item3.Select((DiscordMessage m) => m.Message.Trim()));
 						try
 						{
 							await discordMessenger.SendTextMessage(webHookUrl, textMessage);
 						}
-						catch (Exception ex)
+						catch (Exception ex2)
 						{
-							_logger.LogError("Exception", ex);
+							_logger.LogError(ex2, "Exception");
 						}
 					}
 				}
 			}
-			catch (Exception ex2)
+			catch (Exception ex3)
 			{
-				_logger.LogError("Exception", ex2);
+				_logger.LogError(ex3, "Exception");
 			}
 			await Task.Delay(1000, stoppingToken);
 		}

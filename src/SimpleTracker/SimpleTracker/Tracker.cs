@@ -17,6 +17,10 @@ public class Tracker
 {
 	private const int THROTTLE_DELAY = 200;
 
+	private const int PAYOUT_SHIFT_EMBED_COLOR = 0xE67E22;
+
+	private const int MAX_EMBED_FIELD_LENGTH = 1024;
+
 	private ITagsProvider TagProvider;
 
 	private readonly Channel<DiscordMessage> _channel;
@@ -27,9 +31,13 @@ public class Tracker
 
 	private IPlayerSettingsProvider PlayerSettingsProvider { get; set; }
 
-	private IArenaRankStorage ArenaRankStorage { get; set; }
+	private IPersistentStorageService Storage { get; set; }
 
 	private IPlayerRankService PlayerRankService { get; set; }
+
+	private IPayoutService PayoutService { get; set; }
+
+	private IAttackTrackerService AttackTracker { get; set; }
 
 	private ILog Logger { get; set; }
 
@@ -37,11 +45,11 @@ public class Tracker
 
 	private IStatsService StatService { get; set; }
 
-	public Tracker(IDiscordMessenger messenger, IPlayerSettingsProvider playerSettingsProvider, IArenaRankStorage arenaRankStorage, IPlayerRankService playerRankService, ILog logger, ITagsProvider tagProvider, ArenaType arenaType, IStatsService statService, Channel<DiscordMessage> channel, ISettingsService settingService)
+	public Tracker(IDiscordMessenger messenger, IPlayerSettingsProvider playerSettingsProvider, IPersistentStorageService storage, IPlayerRankService playerRankService, ILog logger, ITagsProvider tagProvider, ArenaType arenaType, IStatsService statService, Channel<DiscordMessage> channel, ISettingsService settingService, IPayoutService payoutService, IAttackTrackerService attackTracker)
 	{
 		Messenger = messenger;
 		PlayerSettingsProvider = playerSettingsProvider;
-		ArenaRankStorage = arenaRankStorage;
+		Storage = storage;
 		PlayerRankService = playerRankService;
 		Logger = logger;
 		ArenaType = arenaType;
@@ -49,6 +57,8 @@ public class Tracker
 		StatService = statService;
 		_channel = channel;
 		_settingService = settingService;
+		PayoutService = payoutService;
+		AttackTracker = attackTracker;
 	}
 
 	public void PostStats()
@@ -82,24 +92,35 @@ public class Tracker
 	{
 		try
 		{
+			string allyCode = setting.AllyCode.NormalizeAllyCode();
 			PlayerArenaRank result = PlayerRankService.GetPlayerRank(setting.AllyCode, auth).Result;
 			int num = ((ArenaType == ArenaType.Fleet) ? result.FleetArenaRank : result.SquadArenaRank);
-			int? rank = ArenaRankStorage.GetRank(setting.AllyCode);
-			ArenaRankStorage.SaveRank(setting.AllyCode, num);
-			Duration poTime = PoUtils.GetPoTime(result.PayoutOffsetMinutes, ArenaType, null);
-			MessageMap map = PopulateMessageMap(setting, result.PlayerName, rank.GetValueOrDefault(), num, poTime);
-			bool isStatusMessageDisabled = _settingService.IsStatusMessageDisabled;
-			if (!rank.HasValue)
+			string utcPayoutTime = PayoutService.GetUtcPayoutTime(result.PayoutOffsetMinutes, ArenaType);
+			TrackerState trackerState = Storage.Load();
+			bool flag = !trackerState.Players.TryGetValue(allyCode, out PlayerState playerState);
+			if (flag || playerState == null)
 			{
-				if (!isStatusMessageDisabled)
-				{
-					SendStatusMessage(map);
-				}
+				playerState = new PlayerState();
+				trackerState.Players[allyCode] = playerState;
 			}
-			else if (rank != num)
+			int currentRank = playerState.CurrentRank;
+			string utcPayoutTime2 = playerState.UtcPayoutTime;
+			playerState.PlayerName = result.PlayerName;
+			playerState.PreviousRank = currentRank;
+			playerState.CurrentRank = num;
+			playerState.UtcPayoutTime = utcPayoutTime;
+			playerState.TimezoneOffsetMinutes = result.PayoutOffsetMinutes;
+			if (flag)
 			{
-				if (rank > num)
+				playerState.PreviousRank = num;
+			}
+			Duration poTime = PoUtils.GetPoTime(result.PayoutOffsetMinutes, ArenaType, null);
+			MessageMap map = PopulateMessageMap(setting, result.PlayerName, currentRank, num, poTime);
+			if (!flag && currentRank != num)
+			{
+				if (currentRank > num)
 				{
+					AttackTracker.RecordAttack(allyCode, result.PayoutOffsetMinutes, ArenaType);
 					SendClimbMessage(map, setting);
 				}
 				else
@@ -107,6 +128,11 @@ public class Tracker
 					SendDropMessage(map, setting);
 				}
 			}
+			if (_settingService.IsPayoutTrackingEnabled && !flag && !string.IsNullOrEmpty(utcPayoutTime2) && utcPayoutTime2 != utcPayoutTime)
+			{
+				SendPayoutShiftMessage(allyCode, result, utcPayoutTime2, utcPayoutTime, trackerState);
+			}
+			Storage.Save(trackerState);
 		}
 		catch (Exception ex)
 		{
@@ -114,7 +140,7 @@ public class Tracker
 		}
 	}
 
-	private MessageMap PopulateMessageMap(PlayerSettings playerSettings, string playerName, int prevRank, int currentRank, Duration timeToPo)
+	public static MessageMap PopulateMessageMap(PlayerSettings playerSettings, string playerName, int prevRank, int currentRank, Duration timeToPo, ISettingsService settingService)
 	{
 		MessageMap messageMap = new MessageMap();
 		messageMap.PlayerName = playerName;
@@ -125,15 +151,30 @@ public class Tracker
 		messageMap.UserIcon = (playerSettings.UserIcon ?? "").Trim();
 		messageMap.AllyCode = (playerSettings.AllyCode ?? "").Replace("-", "").Trim();
 		double totalMinutes = timeToPo.TotalMinutes;
-		if (currentRank >= _settingService.TagOnDropRankLimit && totalMinutes < (double)_settingService.TagOnDropPayoutLimitMins)
+		if (currentRank >= settingService.TagOnDropRankLimit && totalMinutes < (double)settingService.TagOnDropPayoutLimitMins)
 		{
 			messageMap.TagOnDrop = (string.IsNullOrEmpty((playerSettings?.TagIdOnDrop?.Trim() ?? "").Trim()) ? "" : ("<@" + playerSettings.TagIdOnDrop.Trim() + ">"));
 		}
-		if (currentRank <= _settingService.TagOnClimbRankLimit)
+		if (currentRank <= settingService.TagOnClimbRankLimit)
 		{
 			messageMap.TagOnClimb = (string.IsNullOrEmpty((playerSettings?.TagIdOnClimb?.Trim() ?? "").Trim()) ? "" : ("<@" + playerSettings.TagIdOnClimb.Trim() + ">"));
 		}
 		return messageMap;
+	}
+
+	private MessageMap PopulateMessageMap(PlayerSettings playerSettings, string playerName, int prevRank, int currentRank, Duration timeToPo)
+	{
+		return PopulateMessageMap(playerSettings, playerName, prevRank, currentRank, timeToPo, _settingService);
+	}
+
+	private string GetPayoutWebHook()
+	{
+		string payoutWebHookUrl = _settingService.PayoutWebHookUrl;
+		if (!string.IsNullOrWhiteSpace(payoutWebHookUrl))
+		{
+			return payoutWebHookUrl.Trim();
+		}
+		return Messenger.DiscordWebHook;
 	}
 
 	private bool WriteDiscordMessage(string textMessage)
@@ -151,10 +192,19 @@ public class Tracker
 		return num;
 	}
 
-	private void SendStatusMessage(MessageMap map)
+	private bool WriteDiscordEmbedMessage(DiscordEmbed embed, string webHookUrl)
 	{
-		string textMessage = MessageGenerator.GenerateStatusMessage(map, _settingService.MessageFormatOnStatus);
-		WriteDiscordMessage(textMessage);
+		DiscordMessage item = new DiscordMessage
+		{
+			DiscrodHookUrl = webHookUrl,
+			Embed = embed
+		};
+		bool num = _channel.Writer.TryWrite(item);
+		if (!num)
+		{
+			Console.WriteLine("Error: failed to enqueue discord message");
+		}
+		return num;
 	}
 
 	private void SendClimbMessage(MessageMap map, PlayerSettings setting)
@@ -167,5 +217,82 @@ public class Tracker
 	{
 		string textMessage = MessageGenerator.GenerateMessageOnDrop(map, _settingService.MessageFormatOnDrop);
 		WriteDiscordMessage(textMessage);
+	}
+
+	private void SendPayoutShiftMessage(string allyCode, PlayerArenaRank rank, string previousUtcPayoutTime, string newUtcPayoutTime, TrackerState state)
+	{
+		PayoutShiftInfo payoutShiftInfo = PayoutService.BuildShiftInfo(allyCode, rank.PlayerName, previousUtcPayoutTime, newUtcPayoutTime);
+		string value = string.Join("\n", PayoutService.GetSharedPayoutGroup(state, newUtcPayoutTime, allyCode).Select((string p) => "- " + p));
+		if (string.IsNullOrEmpty(value))
+		{
+			value = "No other tracked players at this payout slot.";
+		}
+		DiscordEmbed discordEmbed = new DiscordEmbed
+		{
+			Title = "Payout Shift",
+			Color = PAYOUT_SHIFT_EMBED_COLOR,
+			Timestamp = DateTime.UtcNow
+		};
+		discordEmbed.Fields.Add(new DiscordEmbedField
+		{
+			Name = "Player",
+			Value = FormatPlayer(payoutShiftInfo.PlayerName, allyCode),
+			Inline = true
+		});
+		discordEmbed.Fields.Add(new DiscordEmbedField
+		{
+			Name = "Shift Delta",
+			Value = FormatShiftDelta(payoutShiftInfo.ShiftDeltaHours),
+			Inline = true
+		});
+		discordEmbed.Fields.Add(new DiscordEmbedField
+		{
+			Name = "New UTC Payout Time",
+			Value = payoutShiftInfo.NewUtcPayoutTime + " UTC",
+			Inline = true
+		});
+		discordEmbed.Fields.Add(new DiscordEmbedField
+		{
+			Name = "Shared Payout Group",
+			Value = Truncate(value),
+			Inline = false
+		});
+		if (_settingService.PostFullPayoutListOnChange)
+		{
+			string value2 = string.Join("\n", PayoutService.GetFullPayoutRoster(state).Select((PayoutRosterEntry e) => $"`{e.UtcPayoutTime}` {FormatPlayer(e.PlayerName, e.AllyCode)}"));
+			if (!string.IsNullOrEmpty(value2))
+			{
+				discordEmbed.Fields.Add(new DiscordEmbedField
+				{
+					Name = "Full Payout Order",
+					Value = Truncate(value2),
+					Inline = false
+				});
+			}
+		}
+		WriteDiscordEmbedMessage(discordEmbed, GetPayoutWebHook());
+	}
+
+	private static string FormatPlayer(string playerName, string allyCode)
+	{
+		if (!string.IsNullOrWhiteSpace(playerName))
+		{
+			return $"{playerName} ({allyCode})";
+		}
+		return allyCode;
+	}
+
+	private static string FormatShiftDelta(double shiftDeltaHours)
+	{
+		return (shiftDeltaHours >= 0.0 ? "+" : "") + shiftDeltaHours.ToString("0.##") + "h";
+	}
+
+	private static string Truncate(string value)
+	{
+		if (value.Length <= MAX_EMBED_FIELD_LENGTH)
+		{
+			return value;
+		}
+		return value.Substring(0, MAX_EMBED_FIELD_LENGTH - 3) + "...";
 	}
 }

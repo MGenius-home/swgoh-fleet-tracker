@@ -9,4 +9,6 @@ public class DiscordMessage
 	public string Message { get; set; }
 
 	public Instant TimeStamp { get; set; }
+
+	public DiscordEmbed Embed { get; set; }
 }

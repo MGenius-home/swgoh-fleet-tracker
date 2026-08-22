@@ -12,7 +12,7 @@ public class StatsService : IStatsService
 {
 	public static string ClientVersion = "beta-24";
 
-	public static List<string> EnvironmentVariables { get; } = new List<string> { "ARENA_TYPE", "DISCORD_WEB_HOOK", "GAME_CLIENT_VERSION", "ALLY_CODES", "DISCORD_TAGS", "ALLY_CODES_URL", "CUSTOM_MESSAGE_STATUS", "CUSTOM_MESSAGE_DROP", "CUSTOM_MESSAGE_CLIMB" };
+	public static List<string> EnvironmentVariables { get; } = new List<string> { "ARENA_TYPE", "DISCORD_WEB_HOOK", "GAME_CLIENT_VERSION", "ALLY_CODES", "DISCORD_TAGS", "ALLY_CODES_URL", "CUSTOM_MESSAGE_DROP", "CUSTOM_MESSAGE_CLIMB" };
 
 	private static List<string> GetListOfActiveEnvVariables()
 	{
