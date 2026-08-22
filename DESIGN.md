@@ -14,7 +14,7 @@ A single-process, long-running console worker. No inbound HTTP, no database. It 
 
 | Path | Purpose |
 |---|---|
-| `Dockerfile` | Multi-stage build: `sdk:8.0` compiles `src/`, `runtime:8.0-noble-chiseled` runs it (non-root uid 1654, shell-less; `zoneinfo` copied in for `SCHEDULE_TIMEZONE`). |
+| `Dockerfile` | Multi-stage build: `sdk:8.0` compiles `src/`, `runtime:8.0-noble-chiseled` runs it (shell-less; `busybox`+`gosu` and `zoneinfo` are copied in). Entrypoint starts as root, chowns `/app/data` to `PUID`/`PGID` (default 1654), then drops privileges via gosu before launching dotnet - bind mounts need no manual chown. |
 | `docker-compose.yml` | Sample deployment with every optional feature documented. |
 | `.github/workflows/docker-publish.yml` | Builds and publishes multi-arch (`linux/amd64`, `linux/arm64`) images to GHCR on pushes to `master` (tag `latest`) and on `v*` tags (semver tag). |
 | `src/Ipd.GameClient` | Protobuf RPC client for Capital Games' SWGOH endpoint (hand-maintained generated protocol types). |

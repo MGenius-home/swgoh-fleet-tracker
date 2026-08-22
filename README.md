@@ -93,6 +93,7 @@ All configuration is via environment variables.
 | `ALLY_CODES` | one of two | Inline comma-separated ally codes (the simple workflow). Ignored when `ALLY_CODES_URL` is set. |
 | `POLL_INTERVAL_SECONDS` | optional | Seconds between polls of the game server. Default `15`, minimum `2`, maximum `3600`. |
 | `SCHEDULE_TIMEZONE` | optional | IANA time zone used to evaluate `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` (e.g. `America/New_York`). Default `UTC`. DST changes are handled automatically. |
+| `PUID` / `PGID` | optional | UID/GID the tracker runs as, and what `/app/data` is chowned to at startup. Default `1654`. Set these to your host user when bind-mounting a host directory - no manual `chown` needed. |
 | `STORAGE_FILE_PATH` | optional | Path for persistent state storage across container updates. Default `/app/data/state.json` inside the container - no configuration needed for a basic setup. |
 | `ENABLE_ANALYTICS` | optional | Set `TRUE` to send a single startup usage report to the upstream author's stats server. Nothing to do with attack tracking (that's `ENABLE_WEEKLY_ATTACK_SUMMARY`). Default `FALSE` (off). |
 | `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
@@ -210,8 +211,8 @@ Notes:
 
 - `ARENA_TYPE` is gone: squad arena no longer exists in the game, so this fork tracks fleet only. Remove the variable from your compose.
 - `CUSTOM_MESSAGE_STATUS` still works, but it now drives the opt-in **scheduled roster post** (`STATUS_MESSAGE_CRON`) instead of firing automatically on every container start.
-- `PUID` / `PGID` / `TZ` are not needed by this image and are ignored. All payout math is done in UTC internally; use `SCHEDULE_TIMEZONE` to control the schedule clock.
-- This image runs as a non-root user (uid `1654`). If you bind-mount a host directory over `/app/data`, make it writable by that uid (named volumes handle ownership automatically).
+- `PUID` / `PGID` are now supported (default `1654`): the entrypoint chowns `/app/data` to them and drops privileges before starting the app, so bind-mounted host directories need no manual `chown`. `TZ` remains unused - payout math is UTC internally; use `SCHEDULE_TIMEZONE` to control the schedule clock.
+- This image starts as root only to fix `/app/data` ownership, then drops to `PUID`/`PGID` (default `1654`) before the app runs. Bind-mounted host directories just work; named volumes need nothing.
 
 ## State persistence
 
@@ -229,7 +230,7 @@ Be aware: if you remove the container (`docker rm` / `docker compose down --remo
 
 | Symptom | Cause / fix |
 |---|---|
-| Repeated `Access to the path '/app/data/...' is denied` in logs | You bind-mounted a host directory over `/app/data` without fixing ownership. The container runs as uid `1654`: `docker run --rm --user 0 -v /host/path:/data busybox chown -R 1654:1654 /data`. Named volumes avoid this entirely. |
+| Repeated `Access to the path '/app/data/...' is denied` in logs (older image versions) | Current images fix data-dir ownership automatically at startup (`PUID`/`PGID`, default `1654`). Upgrade, or for bind mounts set `PUID`/`PGID` to your host user. Named volumes need nothing. |
 | No climb/drop messages at all | Ranks may genuinely be unchanged - alerts fire on rank *changes* only, not on every attack. Check the last-known vs current rank in `state.json`. |
 | Mentions (`@player`) never appear | The template must contain `%TAG_ON_CLIMB%`/`%TAG_ON_DROP%`, and an id must resolve (gist `tagIdOn*` fields or `DISCORD_TAGS`). |
 | Roster / summary posts missing | These are opt-in: set `STATUS_MESSAGE_CRON`, and `ENABLE_WEEKLY_ATTACK_SUMMARY=TRUE` (+ cron). Check startup logs for the `Scheduled with schedule:` lines or a "disabled" notice. |
