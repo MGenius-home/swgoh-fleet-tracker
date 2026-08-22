@@ -94,7 +94,7 @@ All configuration is via environment variables.
 | `POLL_INTERVAL_SECONDS` | optional | Seconds between polls of the game server. Default `15`, minimum `2`, maximum `3600`. |
 | `SCHEDULE_TIMEZONE` | optional | IANA time zone used to evaluate `STATUS_MESSAGE_CRON` and `WEEKLY_ATTACK_SUMMARY_CRON` (e.g. `America/New_York`). Default `UTC`. DST changes are handled automatically. |
 | `STORAGE_FILE_PATH` | optional | Path for persistent state storage across container updates. Default `/app/data/state.json` inside the container - no configuration needed for a basic setup. |
-| `ENABLE_ANALYTICS` | optional | Set `TRUE` to enable the startup analytics beacon sent to the upstream stats service. Default `FALSE` (off). |
+| `ENABLE_ANALYTICS` | optional | Set `TRUE` to send a single startup usage report to the upstream author's stats server. Nothing to do with attack tracking (that's `ENABLE_WEEKLY_ATTACK_SUMMARY`). Default `FALSE` (off). |
 | `LOGGER_TYPE` | optional | `CONSOLE` (default) or `DISCORD` (mirror logs to a Discord channel). |
 | `LOGGER_HOOK` | conditional | Discord webhook for the logger when `LOGGER_TYPE=DISCORD`. |
 | `GAME_CLIENT_VERSION` | optional | Override the spoofed SWGOH client version (default `99.99.99`). |

@@ -46,7 +46,16 @@ public class WeeklyAttackSummaryJob : BackgroundService
 			_logger.Log("[WeeklyAttackSummaryJob]:ENABLE_WEEKLY_ATTACK_SUMMARY not set to TRUE. Weekly summary is off.");
 			return;
 		}
-		CronExpression cronExpression = CronExpression.ParseSchedule(_settings.WeeklyAttackSummaryCron);
+		CronExpression cronExpression;
+		try
+		{
+			cronExpression = CronExpression.ParseSchedule(_settings.WeeklyAttackSummaryCron);
+		}
+		catch (Exception ex)
+		{
+			_logger.Log($"[WeeklyAttackSummaryJob]:Invalid schedule '{_settings.WeeklyAttackSummaryCron}':{ex.Message} Weekly summary is disabled.");
+			return;
+		}
 		TimeZoneInfo zone = ScheduleTimeZone.Resolve(_settings.ScheduleTimeZoneId, message => _logger.Log(message));
 		_logger.Log($"[WeeklyAttackSummaryJob]:Scheduled with schedule:{_settings.WeeklyAttackSummaryCron} (timezone:{zone.Id})");
 		while (!stoppingToken.IsCancellationRequested)

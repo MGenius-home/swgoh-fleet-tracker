@@ -46,7 +46,16 @@ public class ScheduledStatusJob : BackgroundService
 			_logger.Log("[ScheduledStatusJob]:STATUS_MESSAGE_CRON not set. Scheduled roster posts are off.");
 			return;
 		}
-		CronExpression cronExpression = CronExpression.ParseSchedule(_settings.StatusMessageCron);
+		CronExpression cronExpression;
+		try
+		{
+			cronExpression = CronExpression.ParseSchedule(_settings.StatusMessageCron);
+		}
+		catch (Exception ex)
+		{
+			_logger.Log($"[ScheduledStatusJob]:Invalid schedule '{_settings.StatusMessageCron}':{ex.Message} Scheduled roster posts are disabled.");
+			return;
+		}
 		TimeZoneInfo zone = ScheduleTimeZone.Resolve(_settings.ScheduleTimeZoneId, message => _logger.Log(message));
 		_logger.Log($"[ScheduledStatusJob]:Scheduled with schedule:{_settings.StatusMessageCron} (timezone:{zone.Id})");
 		while (!stoppingToken.IsCancellationRequested)
