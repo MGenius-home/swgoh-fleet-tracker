@@ -1,6 +1,8 @@
-# swgoh-arena-tracker — Design Document
+# swgoh-fleet-tracker — Historical Design Document
 
-A design document for the fork [`MGenius-home/swgoh-arena-tracker`](https://github.com/MGenius-home/swgoh-arena-tracker) (formerly `MGenius-home/ccIPD-arena-tracker`), which wraps [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker) (upstream source) as a Docker image built from the pinned upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
+> **Note:** This document describes the original beta-24 packaging era and is kept for historical reference. Since it was written, squad arena was removed from SWGOH — this fork now tracks fleet only, compiles its own .NET 8 source (no longer pulls the upstream image), and lives at [`MGenius-home/swgoh-fleet-tracker`](https://github.com/MGenius-home/swgoh-fleet-tracker) (formerly `MGenius-home/swgoh-arena-tracker`, `MGenius-home/ccIPD-arena-tracker`).
+
+A design document for the fork [`MGenius-home/swgoh-arena-tracker`](https://github.com/MGenius-home/swgoh-arena-tracker), which wraps [`iprobedroid/swgoh-arena-tracker`](https://github.com/iprobedroid/swgoh-arena-tracker) (upstream source) as a Docker image built from the pinned upstream image `iprobedroid/swgoh-arena-tracker:beta-24`.
 
 All factual claims below are grounded in either:
 - this fork's own files (`Dockerfile`, `README.md`), or

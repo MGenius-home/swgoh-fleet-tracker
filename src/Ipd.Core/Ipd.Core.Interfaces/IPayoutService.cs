@@ -5,7 +5,7 @@ namespace Ipd.Core.Interfaces;
 
 public interface IPayoutService
 {
-	string GetUtcPayoutTime(int timezoneOffsetMinutes, ArenaType arenaType);
+	string GetUtcPayoutTime(int timezoneOffsetMinutes);
 
 	PayoutShiftInfo BuildShiftInfo(string allyCode, string playerName, string previousUtcPayoutTime, string newUtcPayoutTime);
 

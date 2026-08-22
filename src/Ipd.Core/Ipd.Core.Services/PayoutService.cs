@@ -8,16 +8,13 @@ namespace Ipd.Core.Services;
 
 public class PayoutService : IPayoutService
 {
-	public const int SQUAD_PAYOUT_HOUR = 18;
-
 	public const int FLEET_PAYOUT_HOUR = 19;
 
 	private const int MinutesPerDay = 1440;
 
-	public string GetUtcPayoutTime(int timezoneOffsetMinutes, ArenaType arenaType)
+	public string GetUtcPayoutTime(int timezoneOffsetMinutes)
 	{
-		int baseHour = ((arenaType == ArenaType.Fleet) ? FLEET_PAYOUT_HOUR : SQUAD_PAYOUT_HOUR);
-		int minuteOfDay = Mod(baseHour * 60 - timezoneOffsetMinutes, MinutesPerDay);
+		int minuteOfDay = Mod(FLEET_PAYOUT_HOUR * 60 - timezoneOffsetMinutes, MinutesPerDay);
 		return $"{minuteOfDay / 60:D2}:{minuteOfDay % 60:D2}";
 	}
 

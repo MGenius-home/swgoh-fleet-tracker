@@ -49,11 +49,10 @@ internal class Program
 			services.AddTransient<INewDiscordMessenger, NewDiscordMessenger>();
 			services.AddTransient<HttpClient>();
 			services.AddHostedService<DiscordMessengerJob>();
-			ArenaType arenaType = ResolveArenaType();
 			IPlayerSettingsProvider playerSettingsProvider = CreatePlayerSettingsProvider();
 			services.AddSingleton((Func<IServiceProvider, IHostedService>)delegate(IServiceProvider serviceProvider)
 			{
-				Tracker tracker = InitTracker(serviceProvider.GetRequiredService<Channel<DiscordMessage>>(), arenaType, playerSettingsProvider);
+				Tracker tracker = InitTracker(serviceProvider.GetRequiredService<Channel<DiscordMessage>>(), playerSettingsProvider);
 				tracker.PostStats();
 				return new TrackerJob(tracker, Logger);
 			});
@@ -63,14 +62,9 @@ internal class Program
 			});
 			services.AddSingleton((Func<IServiceProvider, IHostedService>)delegate(IServiceProvider serviceProvider)
 			{
-				return new ScheduledStatusJob(serviceProvider, Logger, new EnvSettingsService(), arenaType, playerSettingsProvider);
+				return new ScheduledStatusJob(serviceProvider, Logger, new EnvSettingsService(), playerSettingsProvider);
 			});
 		});
-	}
-
-	private static ArenaType ResolveArenaType()
-	{
-		return ((!(Environment.GetEnvironmentVariable("ARENA_TYPE") ?? "SQUAD").Trim().Equals("FLEET")) ? ArenaType.Squad : ArenaType.Fleet);
 	}
 
 	private static IPlayerSettingsProvider CreatePlayerSettingsProvider()
@@ -100,10 +94,14 @@ internal class Program
 		}
 	}
 
-	private static Tracker InitTracker(Channel<DiscordMessage> channel, ArenaType arenaType, IPlayerSettingsProvider playerSettingsProvider)
+	private static Tracker InitTracker(Channel<DiscordMessage> channel, IPlayerSettingsProvider playerSettingsProvider)
 	{
 		string gameClientVersion = Environment.GetEnvironmentVariable("GAME_CLIENT_VERSION") ?? "99.99.99";
-		Logger.Log($"Arena type: {arenaType}");
+		if (!string.IsNullOrEmpty((Environment.GetEnvironmentVariable("ARENA_TYPE") ?? "").Trim()))
+		{
+			Logger.Log("ARENA_TYPE is no longer used - fleet arena is the only tracked type.");
+		}
+		Logger.Log("Tracking fleet arena payouts (19:00 local time).");
 		string text2 = (Environment.GetEnvironmentVariable("DISCORD_WEB_HOOK") ?? "").Trim();
 		if (string.IsNullOrEmpty(text2))
 		{
@@ -131,6 +129,6 @@ internal class Program
 		{
 			GameClientVersion = gameClientVersion,
 			LogPerformance = false
-		}), Logger, new EnvTagsProvider(Logger), arenaType, new StatsService(), channel, envSettingsService, payoutService, attackTrackerService);
+		}), Logger, new EnvTagsProvider(Logger), new StatsService(), channel, envSettingsService, payoutService, attackTrackerService);
 	}
 }

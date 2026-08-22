@@ -1,8 +1,8 @@
 services:
-  swgoh-arena-tracker:
+  swgoh-fleet-tracker:
     build: .
-    # image: ghcr.io/MGenius-home/swgoh-arena-tracker:latest   # use instead of build once published
-    container_name: swgoh-arena-tracker
+    # image: ghcr.io/mgenius-home/swgoh-fleet-tracker:latest   # multi-arch (amd64 + arm64), use instead of build once published
+    container_name: swgoh-fleet-tracker
     restart: unless-stopped
     environment:
       # Required
@@ -11,7 +11,6 @@ services:
       # Players - use ALLY_CODES or ALLY_CODES_URL (URL wins when both are set)
       ALLY_CODES: "123456789,123456788,123456999"
       # ALLY_CODES_URL: "https://gist.github.com/<user>/<id>/raw"
-      ARENA_TYPE: "SQUAD"                       # SQUAD or FLEET
       # Optional features - all off by default; set TRUE / add a schedule to enable
       # ENABLE_PAYOUT_TRACKING: "TRUE"            # notify (embed) when a player's payout shifts
       # POST_FULL_PAYOUT_LIST_ON_CHANGE: "TRUE"   # append full ordered payout list to shift notifications
@@ -19,16 +18,13 @@ services:
       # WEEKLY_ATTACK_SUMMARY_CRON: "SUNDAY 18:00"  # e.g. "FRIDAY 19:00", "DAILY 12:00", "HOURLY", "WEEKLY", or cron "0 0 * * 0"
       # STATUS_MESSAGE_CRON: "DAILY 04:00"        # scheduled roster post (rank + time-to-payout), e.g. "HOURLY", "SUNDAY 18:00", cron "0 4 * * *"
       # ENABLE_ANALYTICS: "TRUE"                  # send startup analytics beacon to the upstream stats service
-      STORAGE_FILE_PATH: "/app/data/state.json"
-      # Optional tuning
       # TAG_ON_CLIMB_RANK_LIMIT: "50"
       # TAG_ON_DROP_RANK_LIMIT: "10"
       # TAG_ON_DROP_PO_LIMIT: "120"
-      # DISCORD_TAGS: "123456789:@role_or_user_id"
-      # LOGGER_TYPE: "CONSOLE"                   # CONSOLE or DISCORD (+ LOGGER_HOOK)
-      # GAME_CLIENT_VERSION: "99.99.99"
+      # LOGGER_TYPE: "CONSOLE"                    # CONSOLE or DISCORD (+ LOGGER_HOOK)
+      STORAGE_FILE_PATH: "/app/data/state.json"
     volumes:
-      - swgoh-tracker-data:/app/data
+      - swgoh-fleet-tracker-data:/app/data
 
 volumes:
-  swgoh-tracker-data:
+  swgoh-fleet-tracker-data:

@@ -41,18 +41,15 @@ public class Tracker
 
 	private ILog Logger { get; set; }
 
-	private ArenaType ArenaType { get; set; }
+		private IStatsService StatService { get; set; }
 
-	private IStatsService StatService { get; set; }
-
-	public Tracker(IDiscordMessenger messenger, IPlayerSettingsProvider playerSettingsProvider, IPersistentStorageService storage, IPlayerRankService playerRankService, ILog logger, ITagsProvider tagProvider, ArenaType arenaType, IStatsService statService, Channel<DiscordMessage> channel, ISettingsService settingService, IPayoutService payoutService, IAttackTrackerService attackTracker)
+	public Tracker(IDiscordMessenger messenger, IPlayerSettingsProvider playerSettingsProvider, IPersistentStorageService storage, IPlayerRankService playerRankService, ILog logger, ITagsProvider tagProvider,  IStatsService statService, Channel<DiscordMessage> channel, ISettingsService settingService, IPayoutService payoutService, IAttackTrackerService attackTracker)
 	{
 		Messenger = messenger;
 		PlayerSettingsProvider = playerSettingsProvider;
 		Storage = storage;
 		PlayerRankService = playerRankService;
 		Logger = logger;
-		ArenaType = arenaType;
 		TagProvider = tagProvider;
 		StatService = statService;
 		_channel = channel;
@@ -67,7 +64,7 @@ public class Tracker
 		{
 			IList<PlayerSettings> result = PlayerSettingsProvider.GetPlayerSettingAsync().Result;
 			List<string> allyCodes = result.Select((PlayerSettings ps) => ps.AllyCode.NormalizeAllyCode()).ToList();
-			StatService.PostStats(ArenaType.ToString(), result.Count, allyCodes);
+			StatService.PostStats("Fleet", result.Count, allyCodes);
 		}
 		catch (Exception)
 		{
@@ -94,8 +91,8 @@ public class Tracker
 		{
 			string allyCode = setting.AllyCode.NormalizeAllyCode();
 			PlayerArenaRank result = PlayerRankService.GetPlayerRank(setting.AllyCode, auth).Result;
-			int num = ((ArenaType == ArenaType.Fleet) ? result.FleetArenaRank : result.SquadArenaRank);
-			string utcPayoutTime = PayoutService.GetUtcPayoutTime(result.PayoutOffsetMinutes, ArenaType);
+			int num = result.FleetArenaRank;
+			string utcPayoutTime = PayoutService.GetUtcPayoutTime(result.PayoutOffsetMinutes);
 			TrackerState trackerState = Storage.Load();
 			bool flag = !trackerState.Players.TryGetValue(allyCode, out PlayerState playerState);
 			if (flag || playerState == null)
@@ -114,13 +111,13 @@ public class Tracker
 			{
 				playerState.PreviousRank = num;
 			}
-			Duration poTime = PoUtils.GetPoTime(result.PayoutOffsetMinutes, ArenaType, null);
+			Duration poTime = PoUtils.GetPoTime(result.PayoutOffsetMinutes, null);
 			MessageMap map = PopulateMessageMap(setting, result.PlayerName, currentRank, num, poTime);
 			if (!flag && currentRank != num)
 			{
 				if (currentRank > num)
 				{
-					AttackTracker.RecordAttack(allyCode, result.PayoutOffsetMinutes, ArenaType);
+					AttackTracker.RecordAttack(allyCode, result.PayoutOffsetMinutes);
 					SendClimbMessage(map, setting);
 				}
 				else

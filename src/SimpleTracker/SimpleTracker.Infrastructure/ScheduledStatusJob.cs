@@ -28,16 +28,13 @@ public class ScheduledStatusJob : BackgroundService
 
 	private readonly IPersistentStorageService _storage;
 
-	private readonly ArenaType _arenaType;
-
 	private readonly IPlayerSettingsProvider _playerSettingsProvider;
 
-	public ScheduledStatusJob(IServiceProvider serviceProvider, ILog logger, ISettingsService settings, ArenaType arenaType, IPlayerSettingsProvider playerSettingsProvider)
+	public ScheduledStatusJob(IServiceProvider serviceProvider, ILog logger, ISettingsService settings, IPlayerSettingsProvider playerSettingsProvider)
 	{
 		_serviceProvider = serviceProvider;
 		_logger = logger;
 		_settings = settings;
-		_arenaType = arenaType;
 		_playerSettingsProvider = playerSettingsProvider;
 		_storage = new FileStorageService(settings.StorageFilePath, logger);
 	}
@@ -94,7 +91,7 @@ public class ScheduledStatusJob : BackgroundService
 			{
 				AllyCode = item.Key
 			};
-			Duration poTime = PoUtils.GetPoTime(value.TimezoneOffsetMinutes, _arenaType, Instant.FromDateTimeUtc(utcNow));
+			Duration poTime = PoUtils.GetPoTime(value.TimezoneOffsetMinutes, Instant.FromDateTimeUtc(utcNow));
 			MessageMap messageMap = Tracker.PopulateMessageMap(playerSettings2, value.PlayerName, value.PreviousRank, value.CurrentRank, poTime, _settings);
 			string textMessage = MessageGenerator.GenerateStatusMessage(messageMap, _settings.MessageFormatOnStatus);
 			DiscordMessage discordMessage = new DiscordMessage

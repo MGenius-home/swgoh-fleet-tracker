@@ -20,9 +20,9 @@ public class AttackTrackerService : IAttackTrackerService
 		_payoutService = payoutService;
 	}
 
-	public bool RecordAttack(string allyCode, int timezoneOffsetMinutes, ArenaType arenaType)
+	public bool RecordAttack(string allyCode, int timezoneOffsetMinutes)
 	{
-		if (!IsOutsidePayoutResetWindow(timezoneOffsetMinutes, arenaType, DateTime.UtcNow))
+		if (!IsOutsidePayoutResetWindow(timezoneOffsetMinutes, DateTime.UtcNow))
 		{
 			return false;
 		}
@@ -65,9 +65,9 @@ public class AttackTrackerService : IAttackTrackerService
 		_storage.Save(trackerState);
 	}
 
-	private bool IsOutsidePayoutResetWindow(int timezoneOffsetMinutes, ArenaType arenaType, DateTime utcNow)
+	private bool IsOutsidePayoutResetWindow(int timezoneOffsetMinutes, DateTime utcNow)
 	{
-		int payoutMinuteOfDay = PayoutService.ParseMinuteOfDay(_payoutService.GetUtcPayoutTime(timezoneOffsetMinutes, arenaType));
+		int payoutMinuteOfDay = PayoutService.ParseMinuteOfDay(_payoutService.GetUtcPayoutTime(timezoneOffsetMinutes));
 		int nowMinuteOfDay = utcNow.Hour * 60 + utcNow.Minute;
 		int delta = ((nowMinuteOfDay - payoutMinuteOfDay) % 1440 + 1440) % 1440;
 		return delta >= PAYOUT_RESET_WINDOW_MINUTES;

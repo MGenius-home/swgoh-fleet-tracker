@@ -5,7 +5,7 @@ namespace Ipd.Core.Interfaces;
 
 public interface IAttackTrackerService
 {
-	bool RecordAttack(string allyCode, int timezoneOffsetMinutes, ArenaType arenaType);
+	bool RecordAttack(string allyCode, int timezoneOffsetMinutes);
 
 	IList<AttackSummaryEntry> GetWeeklySummary();
 
