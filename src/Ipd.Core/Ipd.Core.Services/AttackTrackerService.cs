@@ -20,21 +20,9 @@ public class AttackTrackerService : IAttackTrackerService
 		_payoutService = payoutService;
 	}
 
-	public bool RecordAttack(string allyCode, int timezoneOffsetMinutes)
+	public bool ShouldCountAttack(int timezoneOffsetMinutes)
 	{
-		if (!IsOutsidePayoutResetWindow(timezoneOffsetMinutes, DateTime.UtcNow))
-		{
-			return false;
-		}
-		TrackerState trackerState = _storage.Load();
-		if (!trackerState.Players.TryGetValue(allyCode, out var value) || value == null)
-		{
-			return false;
-		}
-		value.WeeklyAttacks++;
-		value.LastAttackTimestamp = DateTime.UtcNow;
-		_storage.Save(trackerState);
-		return true;
+		return IsOutsidePayoutResetWindow(timezoneOffsetMinutes, DateTime.UtcNow);
 	}
 
 	public IList<AttackSummaryEntry> GetWeeklySummary()

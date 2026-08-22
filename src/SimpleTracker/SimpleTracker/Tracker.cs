@@ -134,7 +134,11 @@ public class Tracker
 			{
 				if (currentRank > num)
 				{
-					AttackTracker.RecordAttack(allyCode, result.PayoutOffsetMinutes);
+					if (AttackTracker.ShouldCountAttack(result.PayoutOffsetMinutes))
+					{
+						playerState.WeeklyAttacks++;
+						playerState.LastAttackTimestamp = DateTime.UtcNow;
+					}
 					SendClimbMessage(map, setting);
 				}
 				else
