@@ -230,6 +230,7 @@ Be aware: if you remove the container (`docker rm` / `docker compose down --remo
 
 | Symptom | Cause / fix |
 |---|---|
+| Permission errors (`Access to the path ... denied`) on a **fresh deploy of an older image** | `docker compose up -d` does **not** re-pull images. Run `docker compose pull` then `up -d --force-recreate`. Current images fix data-dir ownership automatically at startup via `PUID`/`PGID` (default `1654`). |
 | Repeated `Access to the path '/app/data/...' is denied` in logs (older image versions) | Current images fix data-dir ownership automatically at startup (`PUID`/`PGID`, default `1654`). Upgrade, or for bind mounts set `PUID`/`PGID` to your host user. Named volumes need nothing. |
 | No climb/drop messages at all | Ranks may genuinely be unchanged - alerts fire on rank *changes* only, not on every attack. Check the last-known vs current rank in `state.json`. |
 | Mentions (`@player`) never appear | The template must contain `%TAG_ON_CLIMB%`/`%TAG_ON_DROP%`, and an id must resolve (gist `tagIdOn*` fields or `DISCORD_TAGS`). |
