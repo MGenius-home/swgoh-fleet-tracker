@@ -1,1 +1,31 @@
+## Build artifacts
+bin/
+obj/
+*.user
+*.suo
+
+## IDE
+.vs/
+.vscode/
+.idea/
+
+## OS
+.DS_Store
+Thumbs.db
 vlc-help.txt
+
+## NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.assets.json
+
+## Logs
+*.log
+
+## Local secrets / test config (never commit)
+.env
+.env.*
+*.env
+test-data/
+test-data3/
