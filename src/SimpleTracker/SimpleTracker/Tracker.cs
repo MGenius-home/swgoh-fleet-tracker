@@ -73,7 +73,12 @@ public class Tracker
 
 	public void Track()
 	{
-		PlayerSettingsProvider.GetPlayerSettingAsync().Result.ForEach(delegate(PlayerSettings settings)
+		IList<PlayerSettings> playerSettings = PlayerSettingsProvider.GetPlayerSettingAsync().Result;
+		if (playerSettings.Count > 0)
+		{
+			PruneRemovedPlayers(playerSettings);
+		}
+		playerSettings.ForEach(delegate(PlayerSettings settings)
 		{
 			if (!settings.Skip)
 			{
@@ -83,6 +88,28 @@ public class Tracker
 				});
 			}
 		});
+	}
+
+	public static int PruneRemovedPlayers(TrackerState state, IEnumerable<string> currentAllyCodes)
+	{
+		HashSet<string> currentCodes = new HashSet<string>(currentAllyCodes.Select((string c) => c.NormalizeAllyCode()));
+		List<string> stale = state.Players.Keys.Where((string k) => !currentCodes.Contains(k)).ToList();
+		foreach (string key in stale)
+		{
+			state.Players.Remove(key);
+		}
+		return stale.Count;
+	}
+
+	private void PruneRemovedPlayers(IList<PlayerSettings> current)
+	{
+		TrackerState trackerState = Storage.Load();
+		int num = PruneRemovedPlayers(trackerState, current.Select((PlayerSettings s) => s.AllyCode));
+		if (num > 0)
+		{
+			Storage.Save(trackerState);
+			Logger.Log($"Removed {num} player(s) no longer in the tracked list: {string.Join(", ", trackerState.Players.Keys.OrderBy((string k) => k))}");
+		}
 	}
 
 	public void TrackOneAllyCode(PlayerSettings setting, AuthResponse auth)

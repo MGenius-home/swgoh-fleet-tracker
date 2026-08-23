@@ -84,7 +84,8 @@ There is **no payout timestamp and no time-to-payout field** in the protocol. Fl
    - climb → `AttackTracker.ShouldCountAttack(offset)` (skips the 60-minute post-payout window, since shard reshuffles there are not attacks) then `WeeklyAttacks++`, and a climb message;
    - drop → drop message.
 5. Payout shift: `RegisterPayoutObservation` requires the **same new slot on two consecutive polls** before announcing (candidate held in `PlayerState.PendingUtcPayoutTime`); one-poll bad data can never produce a shift embed.
-6. Save state atomically (see §9).
+6. Players no longer in the tracked list are pruned from state at the start of each pass (`PruneRemovedPlayers`); skipped when the tracked list is empty to protect against transient source failures.
+7. Save state atomically (see §9).
 
 ## 7. Payout shift notifications
 

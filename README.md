@@ -218,7 +218,7 @@ Notes:
 
 Player ranks, payout slots, attack counters, and schedule bookkeeping are stored in a single JSON file, defaulting to `/app/data/state.json` inside the container. You do not have to set anything for this to work - out of the box the tracker uses its internal container storage and survives container restarts.
 
-Startup is silent: players are re-baselined from stored state without posting anything, so unlike the upstream image the tracker does not flood Discord with a full ally-code/payout list on every start. New players added to `ALLY_CODES` are also recorded silently; only climbs, drops, payout shifts, scheduled roster posts, and weekly summaries generate messages.
+Startup is silent: players are re-baselined from stored state without posting anything, so unlike the upstream image the tracker does not flood Discord with a full ally-code/payout list on every start. New players added to `ALLY_CODES` are recorded silently, and **players removed from the list are pruned from state automatically** on the next poll, so they disappear from rosters and weekly summaries too. (Pruning is skipped if the tracked list comes back empty - e.g. a gist URL that fails - so a transient source failure can't wipe your history.)
 
 Be aware: if you remove the container (`docker rm` / `docker compose down --remove-volumes`), Docker discards that anonymous internal volume and state is lost. To keep history across full rebuilds/recreations, mount a named volume or host directory over `/app/data` (or point `STORAGE_FILE_PATH` at a mounted path):
 
